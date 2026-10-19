@@ -41,14 +41,17 @@ public sealed class RequestThrottle
         if (!_loaded)
         {
             var state = await _repo.GetAsync(ct);
-            if (state.LastCallUtc.HasValue) _lastCallUtc = state.LastCallUtc.Value;
-            if (state.BlockedUntilUtc.HasValue) _blockedUntilUtc = state.BlockedUntilUtc.Value;
+            if (state.LastCallUtc.HasValue) 
+                _lastCallUtc = state.LastCallUtc.Value;
+            if (state.BlockedUntilUtc.HasValue) 
+                _blockedUntilUtc = state.BlockedUntilUtc.Value;
+            
             _loaded = true;
         }
 
         var jitter = TimeSpan.FromSeconds(Random.Shared.NextDouble() * _jitterSeconds);
-        var spacedAt = _lastCallUtc == DateTime.MinValue ? DateTime.MinValue : _lastCallUtc + _interval + jitter;
-        var readyAt = spacedAt > _blockedUntilUtc ? spacedAt : _blockedUntilUtc;
+        var spacedAt = (_lastCallUtc == DateTime.MinValue ? DateTime.MinValue : _lastCallUtc + _interval + jitter);
+        var readyAt = (spacedAt > _blockedUntilUtc ? spacedAt : _blockedUntilUtc);
 
         var wait = readyAt - DateTime.UtcNow;
         if (wait > TimeSpan.Zero)
@@ -75,7 +78,8 @@ public sealed class RequestThrottle
 
         double baseMinutes = _options.RateLimitCooldownMinutes * Math.Pow(2, Math.Min(_consecutiveRateLimits - 1, 10));
         var cooldown = TimeSpan.FromMinutes(Math.Min(baseMinutes, _options.MaxCooldownMinutes));
-        if (retryAfter.HasValue && retryAfter.Value > cooldown) cooldown = retryAfter.Value;
+        if (retryAfter.HasValue && retryAfter.Value > cooldown) 
+            cooldown = retryAfter.Value;
 
         _blockedUntilUtc = DateTime.UtcNow + cooldown;
         await _repo.SetBlockedUntilAsync(_blockedUntilUtc, ct);

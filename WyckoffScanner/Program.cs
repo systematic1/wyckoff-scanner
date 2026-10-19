@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using WyckoffScanner.AlternativeSources;
 using WyckoffScanner.Analysis;
 using WyckoffScanner.Configuration;
 using WyckoffScanner.Data;
@@ -33,6 +34,7 @@ services.Configure<YahooOptions>(cfg.GetSection(YahooOptions.Section));
 services.Configure<ScheduleOptions>(cfg.GetSection(ScheduleOptions.Section));
 services.Configure<EmailOptions>(cfg.GetSection(EmailOptions.Section));
 services.Configure<AnalyzerOptions>(cfg.GetSection(AnalyzerOptions.Section));
+services.Configure<MassiveOptions>(cfg.GetSection(MassiveOptions.Section));
 
 // Fail fast on missing essentials.
 var email = cfg.GetSection(EmailOptions.Section).Get<EmailOptions>() ?? new EmailOptions();
@@ -49,6 +51,7 @@ services.AddSingleton<LoadLogRepository>();
 services.AddSingleton<JobRunRepository>();
 services.AddSingleton<AnalysisRepository>();
 services.AddSingleton<ThrottleRepository>();
+services.AddSingleton<RequestThrottle>();
 
 // Yahoo! Finance
 void ConfigureYahooClient(IServiceProvider sp, HttpClient client)
@@ -66,16 +69,40 @@ HttpMessageHandler CreateHandler() => new HttpClientHandler
     UseCookies = true
 };
 
-services.AddHttpClient<YahooHtmlQuoteSource>(ConfigureYahooClient).ConfigurePrimaryHttpMessageHandler(CreateHandler);
-services.AddHttpClient<YahooChartQuoteSource>(ConfigureYahooClient).ConfigurePrimaryHttpMessageHandler(CreateHandler);
-services.AddSingleton<IQuoteSource>(sp =>
+// Configure for the selected ApiToUse setting ("Massive", "Alpaca", or "Yahoo")
+string apiToUse = cfg.GetValue<string>("ApiToUse", "massive") ?? "massive";
+switch (apiToUse.ToLower())
 {
-    var o = sp.GetRequiredService<IOptions<YahooOptions>>().Value;
-    return o.Source.Equals("ChartApi", StringComparison.OrdinalIgnoreCase)
-        ? sp.GetRequiredService<YahooChartQuoteSource>()
-        : sp.GetRequiredService<YahooHtmlQuoteSource>();
-});
-services.AddSingleton<RequestThrottle>();
+    case "massive":
+        services.AddHttpClient<MassiveQuoteSource>();
+        services.AddMassiveQuoteSource(cfg);
+        //services.AddSingleton(new MassiveOptions());
+        //services.AddSingleton<IQuoteSource, MassiveQuoteSource>();
+        break;
+    
+    case "alpaca":
+        services.AddHttpClient<AlpacaQuoteSource>();
+        services.AddSingleton(new AlpacaOptions());
+        services.AddSingleton<IQuoteSource, AlpacaQuoteSource>();
+        break;
+        
+    case "yahoo":
+        services.AddHttpClient<YahooHtmlQuoteSource>(ConfigureYahooClient).ConfigurePrimaryHttpMessageHandler(CreateHandler);
+        services.AddHttpClient<YahooChartQuoteSource>(ConfigureYahooClient).ConfigurePrimaryHttpMessageHandler(CreateHandler);
+        services.AddSingleton<IQuoteSource>(sp =>
+        {
+            var o = sp.GetRequiredService<IOptions<YahooOptions>>().Value;
+            return o.Source.Equals("ChartApi", StringComparison.OrdinalIgnoreCase)
+                ? sp.GetRequiredService<YahooChartQuoteSource>()
+                : sp.GetRequiredService<YahooHtmlQuoteSource>();
+        });
+        break;
+        
+    default:
+        throw new Exception($"Unknown ApiToUse: {apiToUse}");    
+}
+
+Console.WriteLine($"Using API Data Source: {apiToUse}");
 
 // App services
 services.AddSingleton<TradingCalendar>();

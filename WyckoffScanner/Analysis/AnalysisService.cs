@@ -42,6 +42,7 @@ public sealed class AnalysisService
         var channel = Channel.CreateUnbounded<SymbolUpdate>();
         foreach (var sym in symbols)
             channel.Writer.TryWrite(new SymbolUpdate(sym, DataChanged: false));
+        
         channel.Writer.Complete();
 
         await ProcessAsync(runDate, channel.Reader, ct);
@@ -115,7 +116,9 @@ public sealed class AnalysisService
         }
 
         var tasks = new Task[workers];
-        for (int i = 0; i < workers; i++) tasks[i] = Task.Run(WorkerAsync, ct);
+        for (int i = 0; i < workers; i++) 
+            tasks[i] = Task.Run(WorkerAsync, ct);
+        
         await Task.WhenAll(tasks);
 
         _log.LogInformation(

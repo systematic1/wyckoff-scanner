@@ -33,7 +33,11 @@ public sealed class WyckoffAnalyzer
 
     public AnalysisResult Analyze(string ticker, IReadOnlyList<DailyQuote> quotes)
     {
-        var result = new AnalysisResult { Ticker = ticker, BarsAnalyzed = quotes.Count };
+        var result = new AnalysisResult
+        {
+            Ticker = ticker, 
+            BarsAnalyzed = quotes.Count
+        };
 
         if (quotes.Count < _o.MinBars)
         {
@@ -70,10 +74,10 @@ public sealed class WyckoffAnalyzer
         }
 
         bool isDistribution = PreferDistribution(acc, dist);
-        var best = isDistribution ? dist! : acc!;
+        var best = (isDistribution ? dist! : acc!);
 
-        result.Pattern = isDistribution ? WyckoffPattern.Distribution : WyckoffPattern.Accumulation;
-        result.Flag = isDistribution && best.Flag != WyckoffFlag.None ? (WyckoffFlag)((int)best.Flag + 3) : best.Flag;
+        result.Pattern = (isDistribution ? WyckoffPattern.Distribution : WyckoffPattern.Accumulation);
+        result.Flag = (isDistribution && best.Flag != WyckoffFlag.None ? (WyckoffFlag)((int)best.Flag + 3) : best.Flag);
         result.SellingExhaustion = true;
         result.AutomaticRally = best.Rally != null;
         result.Accumulation = best.Zones.Count > 0;
@@ -120,17 +124,21 @@ public sealed class WyckoffAnalyzer
 
     private static bool PreferDistribution(Candidate? acc, Candidate? dist)
     {
-        if (dist == null) return false;
-        if (acc == null) return true;
+        if (dist == null) 
+            return false;
+        if (acc == null) 
+            return true;
 
         bool accFlagged = acc.Flag != WyckoffFlag.None;
         bool distFlagged = dist.Flag != WyckoffFlag.None;
-        if (accFlagged != distFlagged) return distFlagged;
+        if (accFlagged != distFlagged) 
+            return distFlagged;
 
         if (accFlagged)
         {
             int ra = Recency(acc), rd = Recency(dist);
-            if (ra != rd) return rd > ra;            // the more recent structure describes where price is now
+            if (ra != rd) 
+                return rd > ra;            // the more recent structure describes where price is now
             return dist.Flag > acc.Flag;
         }
 
@@ -140,9 +148,12 @@ public sealed class WyckoffAnalyzer
     /// <summary>Index of the latest event of the candidate (SoS/SoW, else spring/upthrust, else last box).</summary>
     private static int Recency(Candidate c)
     {
-        if (c.Sos != null) return c.Sos.Index;
-        if (c.Spring != null) return c.Spring.Index;
-        if (c.Zones.Count > 0) return c.Zones[^1].End;
+        if (c.Sos != null) 
+            return c.Sos.Index;
+        if (c.Spring != null) 
+            return c.Spring.Index;
+        if (c.Zones.Count > 0) 
+            return c.Zones[^1].End;
         return c.Exhaustion.LowIndex;
     }
 

@@ -37,8 +37,10 @@ internal sealed class PatternEngine
         foreach (int low in FindPivotLows(s))
         {
             var c = EvaluateCandidate(s, low);
-            if (c == null) continue;
-            if (best == null || c.Rank >= best.Rank) best = c; // chronological order: later wins ties
+            if (c == null) 
+                continue;
+            if (best == null || c.Rank >= best.Rank) 
+                best = c; // chronological order: later wins ties
         }
         return best;
     }
@@ -50,21 +52,27 @@ internal sealed class PatternEngine
     private Candidate? EvaluateCandidate(PriceSeries s, int lowIdx)
     {
         var ex = DetectSellingExhaustion(s, lowIdx);
-        if (ex == null) return null;
+        if (ex == null) 
+            return null;
 
         var cand = new Candidate { Exhaustion = ex };
 
         var ar = DetectAutomaticRally(s, ex);
-        if (ar == null) return cand;
+        if (ar == null) 
+            return cand;
 
         // Structure is dead if price closes decisively below the selling-climax low after the rally.
         double floor = s.Low[lowIdx] * (1 - _o.StructureBreakdownPct);
         for (int i = ar.Index + 1; i < s.Count; i++)
-            if (s.Close[i] < floor) return null;
+        {
+            if (s.Close[i] < floor)
+                return null;
+        }
 
         cand.Rally = ar;
         cand.Zones = DetectAccumulation(s, ex, ar);
-        if (cand.Zones.Count == 0) return cand;
+        if (cand.Zones.Count == 0) 
+            return cand;
 
         // Evaluate every spring; keep the one that yields the most advanced flag (later wins ties).
         WyckoffFlag bestFlag = WyckoffFlag.None;
@@ -96,12 +104,16 @@ internal sealed class PatternEngine
         {
             bool recent = last - sos.Index <= _o.SosMaxAgeBars;
             bool holding = s.Close[last] >= sos.Resistance * (1 - _o.SosHoldTolerancePct);
-            return recent && holding ? WyckoffFlag.SosDetected : WyckoffFlag.None;
+            return recent && holding ? 
+                WyckoffFlag.SosDetected : 
+                WyckoffFlag.None;
         }
 
         bool springRecent = last - spring.Index <= _o.SpringMaxAgeBars;
         bool notBroken = s.Close[last] >= spring.Support * (1 - _o.MaxSpringPiercePct);
-        return springRecent && notBroken ? WyckoffFlag.SpringDetected : WyckoffFlag.None;
+        return springRecent && notBroken ? 
+            WyckoffFlag.SpringDetected : 
+            WyckoffFlag.None;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -119,7 +131,8 @@ internal sealed class PatternEngine
                 if (s.Low[i - k] <= s.Low[i]) isLow = false;   // strictly lower on the left
                 if (s.Low[i + k] < s.Low[i]) isLow = false;    // not lower on the right
             }
-            if (isLow) yield return i;
+            if (isLow) 
+                yield return i;
         }
     }
 
@@ -131,36 +144,49 @@ internal sealed class PatternEngine
     private SellingExhaustion? DetectSellingExhaustion(PriceSeries s, int low)
     {
         int start = Math.Max(0, low - _o.MaxDeclineLookbackBars);
-        if (low - start < _o.MinDeclineBars) return null;
+        if (low - start < _o.MinDeclineBars) 
+            return null;
 
         int high = start;
         for (int i = start; i < low; i++)
             if (s.High[i] >= s.High[high]) high = i;
-        if (low - high < _o.MinDeclineBars) return null;
+        if (low - high < _o.MinDeclineBars) 
+            return null;
 
         double decline = (s.High[high] - s.Low[low]) / s.High[high];
-        if (decline < _o.MinDeclinePct) return null;
+        if (decline < _o.MinDeclinePct) 
+            return null;
 
         int peakMax = low - _o.MinTailBars;
-        if (peakMax < high + 1) return null;
+        if (peakMax < high + 1) 
+            return null;
 
         int peak = high + 1;
         for (int i = high + 1; i <= peakMax; i++)
-            if (s.SmoothedTrPct[i] > s.SmoothedTrPct[peak]) peak = i;
-
+        {
+            if (s.SmoothedTrPct[i] > s.SmoothedTrPct[peak]) 
+                peak = i;
+        }
+        
         double peakIntensity = s.SmoothedTrPct[peak];
-        if (peakIntensity < _o.LargeSellingMultiple * s.MedianTrPct) return null;       // selling wasn't "large"
+        if (peakIntensity < _o.LargeSellingMultiple * s.MedianTrPct) 
+            return null;       // selling wasn't "large"
 
         int endFrom = Math.Max(peak + 1, low - 2);
         double endIntensity = PriceSeries.Mean(s.TrPct, endFrom, low);
-        if (endIntensity > _o.MaxExhaustionDecayRatio * peakIntensity) return null;    // didn't fade enough
-        if (PriceSeries.Slope(s.SmoothedTrPct, peak, low) >= 0) return null;            // not a gradual decrease
+        if (endIntensity > _o.MaxExhaustionDecayRatio * peakIntensity) 
+            return null;    // didn't fade enough
+        if (PriceSeries.Slope(s.SmoothedTrPct, peak, low) >= 0) 
+            return null;            // not a gradual decrease
 
         int vFrom = Math.Max(0, peak - 1), vTo = Math.Min(s.Count - 1, peak + 1);
         double climaxVol = 0;
-        for (int i = vFrom; i <= vTo; i++) climaxVol = Math.Max(climaxVol, s.Volume[i]);
+        for (int i = vFrom; i <= vTo; i++) 
+            climaxVol = Math.Max(climaxVol, s.Volume[i]);
+        
         double volRatio = climaxVol / s.MedianVolume;
-        if (_o.ClimaxVolumeMultiple > 0 && volRatio < _o.ClimaxVolumeMultiple) return null;
+        if (_o.ClimaxVolumeMultiple > 0 && volRatio < _o.ClimaxVolumeMultiple) 
+            return null;
 
         return new SellingExhaustion(high, peak, low, decline, peakIntensity, endIntensity, climaxVol, volRatio);
     }
@@ -173,25 +199,34 @@ internal sealed class PatternEngine
     {
         int low = ex.LowIndex;
         int end = Math.Min(s.Count - 1, low + _o.AutoRallyMaxBars);
-        if (end - low < 3) return null;
+        if (end - low < 3) 
+            return null;
 
         int a = low + 1;
         for (int i = low + 1; i <= end; i++)
-            if (s.High[i] >= s.High[a]) a = i;
+        {
+            if (s.High[i] >= s.High[a])
+                a = i;
+        }
 
-        if (a >= end) return null;      // still rising at the edge of the window: rally has not topped yet
-        if (a - low < 2) return null;
+        if (a >= end) 
+            return null;      // still rising at the edge of the window: rally has not topped yet
+        if (a - low < 2) 
+            return null;
 
         double rise = s.High[a] - s.Low[low];
         double rallyPct = rise / s.Low[low];
         double declineAmt = s.High[ex.HighIndex] - s.Low[low];
         double retrace = declineAmt > 0 ? rise / declineAmt : 0;
-        if (rallyPct < _o.MinRallyPct || retrace < _o.MinRetraceOfDecline) return null;
+        if (rallyPct < _o.MinRallyPct || retrace < _o.MinRetraceOfDecline) 
+            return null;
 
         double avgVol = PriceSeries.Mean(s.Volume, low + 1, a);
         double volRatio = avgVol / s.MedianVolume;
-        if (volRatio < _o.RallyVolumeMinRatio || volRatio > _o.RallyVolumeMaxRatio) return null;
-        if (avgVol >= ex.ClimaxVolume) return null;     // moderate = quieter than the selling climax
+        if (volRatio < _o.RallyVolumeMinRatio || volRatio > _o.RallyVolumeMaxRatio) 
+            return null;
+        if (avgVol >= ex.ClimaxVolume) 
+            return null;     // moderate = quieter than the selling climax
 
         return new AutomaticRally(a, s.High[a], rallyPct, retrace, volRatio);
     }
@@ -217,8 +252,11 @@ internal sealed class PatternEngine
             {
                 double nh = Math.Max(hi, s.High[e + 1]);
                 double nl = Math.Min(lo, s.Low[e + 1]);
-                if ((nh - nl) / nl > _o.MaxAccumulationRangePct || nl < floor || nh > cap) break;
-                hi = nh; lo = nl; e++;
+                if ((nh - nl) / nl > _o.MaxAccumulationRangePct || nl < floor || nh > cap) 
+                    break;
+                hi = nh; 
+                lo = nl; 
+                e++;
             }
 
             if (e - i + 1 >= _o.MinAccumulationBars)
@@ -250,7 +288,8 @@ internal sealed class PatternEngine
         {
             int ws = Math.Max(ar.Index + 1, i - _o.SpringRangeLookbackBars);
             int we = i - 1;
-            if (we - ws + 1 < _o.MinAccumulationBars) continue;
+            if (we - ws + 1 < _o.MinAccumulationBars) 
+                continue;
 
             double support = double.MaxValue, resistance = double.MinValue;
             for (int k = ws; k <= we; k++)
@@ -259,26 +298,37 @@ internal sealed class PatternEngine
                 resistance = Math.Max(resistance, s.High[k]);
             }
 
-            if ((resistance - support) / support > _o.SpringMaxRangePct) continue;   // not a tight range
+            if ((resistance - support) / support > _o.SpringMaxRangePct) 
+                continue;   // not a tight range
 
             int supportTouches = 0, resistanceTouches = 0;
             for (int k = ws; k <= we; k++)
             {
-                if (s.Low[k] <= support * (1 + _o.TouchTolerancePct)) supportTouches++;
-                if (s.High[k] >= resistance * (1 - _o.TouchTolerancePct)) resistanceTouches++;
+                if (s.Low[k] <= support * (1 + _o.TouchTolerancePct)) 
+                    supportTouches++;
+                if (s.High[k] >= resistance * (1 - _o.TouchTolerancePct)) 
+                    resistanceTouches++;
             }
-            if (supportTouches < _o.MinSupportTouches || resistanceTouches < _o.MinResistanceTouches) continue;
+            if (supportTouches < _o.MinSupportTouches || resistanceTouches < _o.MinResistanceTouches) 
+                continue;
 
-            if (s.Low[i] >= support * (1 - _o.MinSpringPiercePct)) continue;          // did not undercut support
-            if (s.Low[i] < support * (1 - _o.MaxSpringPiercePct)) continue;           // too deep: a breakdown
+            if (s.Low[i] >= support * (1 - _o.MinSpringPiercePct)) 
+                continue;          // did not undercut support
+            if (s.Low[i] < support * (1 - _o.MaxSpringPiercePct)) 
+                continue;           // too deep: a breakdown
 
             int recovery = -1;
             int lastCheck = Math.Min(s.Count - 1, i + _o.SpringRecoveryBars);
             for (int k = i; k <= lastCheck; k++)
             {
-                if (s.Close[k] > support) { recovery = k; break; }
+                if (s.Close[k] > support)
+                {
+                    recovery = k; 
+                    break;
+                }
             }
-            if (recovery < 0) continue;                                               // did not recover promptly
+            if (recovery < 0) 
+                continue;                                               // did not recover promptly
 
             springs.Add(new SpringInfo(i, recovery, support, resistance, s.Low[i]));
         }
@@ -294,21 +344,29 @@ internal sealed class PatternEngine
     {
         for (int j = spring.RecoveryIndex + 1; j < s.Count; j++)
         {
-            if (s.Close[j] <= spring.Resistance * (1 + _o.BreakoutMarginPct)) continue;
-            if (s.Close[j] <= s.Open[j]) continue;
+            if (s.Close[j] <= spring.Resistance * (1 + _o.BreakoutMarginPct)) 
+                continue;
+            if (s.Close[j] <= s.Open[j]) 
+                continue;
 
             int vs = Math.Max(0, j - 20);
-            if (j - vs < 5) continue;
+            if (j - vs < 5) 
+                continue;
 
             double avgVol = PriceSeries.Mean(s.Volume, vs, j - 1);
-            if (avgVol <= 0) continue;
+            if (avgVol <= 0) 
+                continue;
             double volRatio = s.Volume[j] / avgVol;
-            if (volRatio < _o.SosVolumeMultiple) continue;
+            if (volRatio < _o.SosVolumeMultiple) 
+                continue;
 
             double avgRange = 0;
-            for (int k = vs; k < j; k++) avgRange += s.High[k] - s.Low[k];
+            for (int k = vs; k < j; k++) 
+                avgRange += s.High[k] - s.Low[k];
+            
             avgRange /= (j - vs);
-            if (s.High[j] - s.Low[j] < avgRange) continue;                            // not a wide-range bar
+            if (s.High[j] - s.Low[j] < avgRange) 
+                continue;                            // not a wide-range bar
 
             return new SosInfo(j, spring.Resistance, volRatio);
         }

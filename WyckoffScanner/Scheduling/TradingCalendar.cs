@@ -32,7 +32,9 @@ public sealed class TradingCalendar
     public DateOnly PreviousTradingDay(DateOnly date)
     {
         var d = date.AddDays(-1);
-        while (!IsTradingDay(d)) d = d.AddDays(-1);
+        while (!IsTradingDay(d)) 
+            d = d.AddDays(-1);
+        
         return d;
     }
 
@@ -41,10 +43,13 @@ public sealed class TradingCalendar
     {
         var today = DateOnly.FromDateTime(nowLocal);
         var todayStart = today.ToDateTime(StartTime);
-        if (IsTradingDay(today) && nowLocal < todayStart) return todayStart;
+        if (IsTradingDay(today) && nowLocal < todayStart) 
+            return todayStart;
 
         var d = today.AddDays(1);
-        while (!IsTradingDay(d)) d = d.AddDays(1);
+        while (!IsTradingDay(d)) 
+            d = d.AddDays(1);
+        
         return d.ToDateTime(StartTime);
     }
 }

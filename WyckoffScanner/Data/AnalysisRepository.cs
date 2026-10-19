@@ -23,7 +23,8 @@ public sealed class AnalysisRepository
 
     public async Task SaveAsync(DateOnly analysisDate, IReadOnlyCollection<AnalysisResult> results, CancellationToken ct)
     {
-        if (results.Count == 0) return;
+        if (results.Count == 0) 
+            return;
 
         const string sql = @"
 INSERT INTO analysis_results

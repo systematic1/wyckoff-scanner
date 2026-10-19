@@ -48,7 +48,9 @@ public sealed class EmailNotifier
         }.ToMessageBody();
 
         using var client = new SmtpClient();
-        var mode = Enum.TryParse<SecureSocketOptions>(_options.SecureSocketMode, true, out var m) ? m : SecureSocketOptions.StartTls;
+        var mode = Enum.TryParse<SecureSocketOptions>(_options.SecureSocketMode, true, out var m) ? 
+            m : 
+            SecureSocketOptions.StartTls;
 
         await client.ConnectAsync(_options.SmtpHost, _options.SmtpPort, mode, ct);
         if (!string.IsNullOrWhiteSpace(_options.Username))
@@ -68,9 +70,7 @@ public sealed class EmailNotifier
         sb.AppendLine();
 
         if (flagged.Count == 0)
-        {
             sb.AppendLine("No symbols are currently flagged.");
-        }
         else
         {
             foreach (var f in flagged)
@@ -90,13 +90,12 @@ public sealed class EmailNotifier
         sb.Append($"<h2>Wyckoff scan for {date:yyyy-MM-dd}</h2>");
 
         if (flagged.Count == 0)
-        {
             sb.Append("<p>No symbols are currently flagged.</p>");
-        }
         else
         {
             sb.Append("<table cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;border:1px solid #ccc\">");
             sb.Append("<tr style=\"background:#f0f0f0;text-align:left\"><th>Symbol</th><th>Pattern</th><th>Flag</th><th>Last close</th><th>Support</th><th>Resistance</th></tr>");
+
             foreach (var f in flagged)
             {
                 sb.Append("<tr style=\"border-top:1px solid #ddd\">");

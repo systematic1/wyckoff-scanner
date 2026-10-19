@@ -47,7 +47,7 @@ public sealed class YahooChartQuoteSource : IQuoteSource
         if (!chart.TryGetProperty("result", out var resultArr) ||
             resultArr.ValueKind != JsonValueKind.Array || resultArr.GetArrayLength() == 0)
         {
-            string err = chart.TryGetProperty("error", out var e) ? e.ToString() : "unknown";
+            string err = (chart.TryGetProperty("error", out var e) ? e.ToString() : "unknown");
             throw new InvalidOperationException($"Yahoo chart API returned no result for {ticker}: {err}");
         }
 
@@ -55,14 +55,16 @@ public sealed class YahooChartQuoteSource : IQuoteSource
         if (!result.TryGetProperty("timestamp", out var ts) || ts.ValueKind != JsonValueKind.Array)
             return Array.Empty<DailyQuote>(); // no trading days in range
 
-        int gmtOffset = result.GetProperty("meta").TryGetProperty("gmtoffset", out var go) ? go.GetInt32() : 0;
+        int gmtOffset = (result.GetProperty("meta").TryGetProperty("gmtoffset", out var go) ? go.GetInt32() : 0);
         var q = result.GetProperty("indicators").GetProperty("quote")[0];
 
         JsonElement? adjArr = null;
         if (result.GetProperty("indicators").TryGetProperty("adjclose", out var adjc) &&
             adjc.ValueKind == JsonValueKind.Array && adjc.GetArrayLength() > 0 &&
             adjc[0].TryGetProperty("adjclose", out var ac))
+        {
             adjArr = ac;
+        }
 
         var list = new List<DailyQuote>();
         int n = ts.GetArrayLength();
@@ -70,13 +72,17 @@ public sealed class YahooChartQuoteSource : IQuoteSource
         {
             if (!TryGet(q, "open", i, out var o) || !TryGet(q, "high", i, out var h) ||
                 !TryGet(q, "low", i, out var l) || !TryGet(q, "close", i, out var c))
+            {
                 continue; // null bar (e.g. halted day)
+            }
 
             TryGet(q, "volume", i, out var v);
             decimal? adj = null;
             if (adjArr.HasValue && adjArr.Value.GetArrayLength() > i &&
                 adjArr.Value[i].ValueKind == JsonValueKind.Number)
+            {
                 adj = (decimal)adjArr.Value[i].GetDouble();
+            }
 
             var local = DateTimeOffset.FromUnixTimeSeconds(ts[i].GetInt64() + gmtOffset).UtcDateTime;
             list.Add(new DailyQuote
@@ -99,9 +105,14 @@ public sealed class YahooChartQuoteSource : IQuoteSource
         value = 0;
         if (!quote.TryGetProperty(name, out var arr) || arr.ValueKind != JsonValueKind.Array ||
             arr.GetArrayLength() <= index)
+        {
             return false;
+        }
+
         var el = arr[index];
-        if (el.ValueKind != JsonValueKind.Number) return false;
+        if (el.ValueKind != JsonValueKind.Number) 
+            return false;
+        
         value = el.GetDouble();
         return true;
     }

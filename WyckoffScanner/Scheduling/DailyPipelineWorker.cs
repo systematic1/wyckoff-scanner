@@ -77,8 +77,14 @@ public sealed class DailyPipelineWorker : BackgroundService
             catch (Exception ex)
             {
                 _log.LogError(ex, "Pipeline failed; will resume in {Minutes} minute(s).", _schedule.FailureRetryMinutes);
-                try { await Task.Delay(TimeSpan.FromMinutes(_schedule.FailureRetryMinutes), ct); }
-                catch (OperationCanceledException) { break; }
+                try
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(_schedule.FailureRetryMinutes), ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
         }
 
@@ -167,7 +173,9 @@ public sealed class DailyPipelineWorker : BackgroundService
         while (!ct.IsCancellationRequested)
         {
             var remaining = target - _calendar.NowLocal();
-            if (remaining <= TimeSpan.Zero) return;
+            if (remaining <= TimeSpan.Zero) 
+                return;
+            
             // Wake periodically so clock changes / DST shifts can't strand us.
             await Task.Delay(remaining < TimeSpan.FromMinutes(30) ? remaining : TimeSpan.FromMinutes(30), ct);
         }

@@ -51,8 +51,12 @@ public sealed class DataLoaderService
 
         async Task Notify(SymbolRecord sym, bool dataChanged)
         {
-            if (onSymbolUpdated == null || !notified.Add(sym.SymbolId)) return;
-            try { await onSymbolUpdated(new SymbolUpdate(sym, dataChanged), ct); }
+            if (onSymbolUpdated == null || !notified.Add(sym.SymbolId)) 
+                return;
+            try
+            {
+                await onSymbolUpdated(new SymbolUpdate(sym, dataChanged), ct);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _log.LogWarning(ex, "{Ticker}: post-load callback failed.", sym.Ticker);
@@ -61,8 +65,11 @@ public sealed class DataLoaderService
 
         DateOnly target = _calendar.PreviousTradingDay(runDate);
         var symbols = await _symbols.GetActiveAsync(ct);
-        _log.LogInformation("Loader: {Count} active symbols, target (previous trading day) = {Target:yyyy-MM-dd}",
-            symbols.Count, target);
+        _log.LogInformation(
+            "Loader: {Count} active symbols, target (previous trading day) = {Target:yyyy-MM-dd}",
+            symbols.Count, 
+            target
+            );
 
         // ---- Phase 0: symbols that are already complete need no Yahoo call - hand them over right away ----------
         if (onSymbolUpdated != null)
@@ -83,7 +90,8 @@ public sealed class DataLoaderService
         {
             ct.ThrowIfCancellationRequested();
             bool ok = await BackfillAsync(sym, runDate, target, ct);
-            if (ok) await Notify(sym, dataChanged: true);
+            if (ok) 
+                await Notify(sym, dataChanged: true);
         }
 
         // ---- Phase 2: previous trading day for everyone ---------------------------------------
@@ -122,8 +130,11 @@ public sealed class DataLoaderService
         int inserted = await _quotes.InsertNewAsync(sym.SymbolId, quotes, ct);
         await _symbols.MarkBackfillCompletedAsync(sym.SymbolId, ct);
         await _loadLog.UpsertAsync(sym.SymbolId, target, "backfill", "success", inserted, null, ct);
-        _log.LogInformation("{Ticker}: back-load done, {Fetched} rows fetched, {Inserted} new.",
-            sym.Ticker, quotes.Count, inserted);
+        _log.LogInformation(
+            "{Ticker}: back-load done, {Fetched} rows fetched, {Inserted} new.",
+            sym.Ticker, 
+            quotes.Count, 
+            inserted);
         return true;
     }
 

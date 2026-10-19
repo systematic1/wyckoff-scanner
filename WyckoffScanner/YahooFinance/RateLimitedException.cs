@@ -8,7 +8,8 @@ public sealed class RateLimitedException : Exception
     /// <summary>Value of the Retry-After header, if Yahoo sent one.</summary>
     public TimeSpan? RetryAfter { get; }
 
-    public RateLimitedException(string message, TimeSpan? retryAfter) : base(message) => RetryAfter = retryAfter;
+    public RateLimitedException(string message, TimeSpan? retryAfter) 
+        : base(message) => RetryAfter = retryAfter;
 
     public static bool IsRateLimited(HttpResponseMessage response) =>
         response.StatusCode == HttpStatusCode.TooManyRequests;
@@ -22,7 +23,9 @@ public sealed class RateLimitedException : Exception
         else if (header?.Date != null)
             retryAfter = header.Date.Value - DateTimeOffset.UtcNow;
 
-        if (retryAfter.HasValue && retryAfter.Value < TimeSpan.Zero) retryAfter = null;
+        if (retryAfter.HasValue && retryAfter.Value < TimeSpan.Zero) 
+            retryAfter = null;
+        
         return new RateLimitedException($"Yahoo! Finance rate-limited the request for {ticker} (HTTP 429).", retryAfter);
     }
 }

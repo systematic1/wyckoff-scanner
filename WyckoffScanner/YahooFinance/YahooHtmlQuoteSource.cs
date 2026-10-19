@@ -49,8 +49,10 @@ public sealed class YahooHtmlQuoteSource : IQuoteSource
 
         var tables = doc.DocumentNode.SelectNodes("//table");
         if (tables == null)
+        {
             throw new InvalidOperationException(
                 $"No <table> found in the Yahoo! page for {ticker} (layout changed, consent page, or request blocked).");
+        }
 
         var quotes = new Dictionary<DateOnly, DailyQuote>();
 
@@ -61,7 +63,8 @@ public sealed class YahooHtmlQuoteSource : IQuoteSource
         {
             var cells = row.SelectNodes("./td");
             // Dividend / split rows have 2 cells (colspan) and header rows use <th>; real price rows have 7.
-            if (cells == null || cells.Count != 7) continue;
+            if (cells == null || cells.Count != 7) 
+                continue;
 
             string[] t = cells.Select(c => HtmlEntity.DeEntitize(c.InnerText).Trim()).ToArray();
 
@@ -70,12 +73,16 @@ public sealed class YahooHtmlQuoteSource : IQuoteSource
 
             if (!TryDec(t[1], out var open) || !TryDec(t[2], out var high) ||
                 !TryDec(t[3], out var low) || !TryDec(t[4], out var close))
+            {
                 continue;
+            }
 
             decimal? adj = TryDec(t[5], out var a) ? a : null;
-            if (!TryLong(t[6], out var volume)) volume = 0;
+            if (!TryLong(t[6], out var volume)) 
+                volume = 0;
 
-            if (high < low) continue; // corrupt row
+            if (high < low) 
+                continue; // corrupt row
 
             var date = DateOnly.FromDateTime(dt);
             quotes[date] = new DailyQuote

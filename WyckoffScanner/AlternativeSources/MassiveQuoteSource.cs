@@ -98,8 +98,10 @@ public sealed class MassiveQuoteSource : IQuoteSource
 
             string body = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
+            {
                 throw new HttpRequestException(
                     $"Massive returned HTTP {(int)response.StatusCode} for {ticker}: {Truncate(body, 300)}");
+            }
 
             url = ParsePage(body, ticker, quotes);
         }
@@ -117,7 +119,7 @@ public sealed class MassiveQuoteSource : IQuoteSource
             string.Equals(status.GetString(), "ERROR", StringComparison.OrdinalIgnoreCase))
         {
             string msg = root.TryGetProperty("error", out var e) ? e.ToString()
-                       : root.TryGetProperty("message", out var m) ? m.ToString() : "unknown error";
+                       : (root.TryGetProperty("message", out var m) ? m.ToString() : "unknown error");
             throw new InvalidOperationException($"Massive error for {ticker}: {msg}");
         }
 
@@ -166,7 +168,9 @@ public sealed class MassiveQuoteSource : IQuoteSource
     private static bool Num(JsonElement obj, string name, out double value)
     {
         value = 0;
-        if (!obj.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Number) return false;
+        if (!obj.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Number) 
+            return false;
+        
         value = el.GetDouble();
         return true;
     }
@@ -175,8 +179,14 @@ public sealed class MassiveQuoteSource : IQuoteSource
 
     private static TimeZoneInfo FindEastern()
     {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
-        catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"); }
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        }
     }
 }
 
