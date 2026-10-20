@@ -99,10 +99,8 @@ switch (apiToUse.ToLower())
         break;
         
     default:
-        throw new Exception($"Unknown ApiToUse: {apiToUse}");    
+        throw new Exception($"Unknown ApiToUse: {apiToUse} [Valid options are 'Massive', 'Alpaca', 'Yahoo']");    
 }
-
-Console.WriteLine($"Using API Data Source: {apiToUse}");
 
 // App services
 services.AddSingleton<TradingCalendar>();
@@ -111,5 +109,12 @@ services.AddSingleton<WyckoffAnalyzer>();
 services.AddSingleton<AnalysisService>();
 services.AddSingleton<EmailNotifier>();
 services.AddHostedService<DailyPipelineWorker>();
+
+var serviceProvider = services.BuildServiceProvider();
+var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+
+logger.LogInformation($"============ Wyckoff scanner started at {DateTime.Now} ===========");
+logger.LogInformation($" *  Using market API: {apiToUse}");
+logger.LogInformation($" *  Email notifications sent to: {email.To}");
 
 await builder.Build().RunAsync();

@@ -27,11 +27,17 @@ public sealed class EmailNotifier
 
     public async Task SendDailyReportAsync(DateOnly analysisDate, CancellationToken ct)
     {
+        if (!_options.Enabled)
+        {
+            _log.LogInformation("Email notification are disabled.");
+            return;
+        }
+        
         var flagged = await _results.GetFlaggedAsync(analysisDate, ct);
 
         if (flagged.Count == 0 && !_options.SendWhenEmpty)
         {
-            _log.LogInformation("No flagged symbols and SendWhenEmpty=false; no e-mail sent.");
+            _log.LogInformation("MAIL: No flagged symbols and SendWhenEmpty=false; no e-mail sent.");
             return;
         }
 
@@ -58,7 +64,7 @@ public sealed class EmailNotifier
         await client.SendAsync(message, ct);
         await client.DisconnectAsync(true, ct);
 
-        _log.LogInformation("E-mail sent to {To} with {Count} flagged symbol(s).", _options.To, flagged.Count);
+        _log.LogInformation("MAIL: E-mail sent to '{To}' with {Count} flagged symbol(s).", _options.To, flagged.Count);
     }
 
     private static string Money(decimal? v) => v.HasValue ? v.Value.ToString("F2", CultureInfo.InvariantCulture) : "-";

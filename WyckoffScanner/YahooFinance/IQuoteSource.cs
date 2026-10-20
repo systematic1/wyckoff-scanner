@@ -10,4 +10,8 @@ public interface IQuoteSource
     /// </summary>
     Task<IReadOnlyList<DailyQuote>> GetDailyQuotesAsync(
         string ticker, DateOnly fromDate, DateOnly toDateInclusive, CancellationToken ct);
+
+    double GetDelaySeconds();
+
+    bool UseThrottle();
 }

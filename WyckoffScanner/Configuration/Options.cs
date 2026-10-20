@@ -17,7 +17,7 @@ public sealed class YahooOptions
     public string ChartApiBaseUrl { get; set; } = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
     /// <summary>Minimum minutes between two calls to Yahoo (spec: 3).</summary>
-    public double DelayBetweenCallsMinutes { get; set; } = 3;
+    public double DelayBetweenCallsSeconds { get; set; } = 180;
 
     /// <summary>Attempts per symbol per run (each attempt is a separate call and respects the delay).</summary>
     public int MaxAttemptsPerSymbol { get; set; } = 2;
@@ -58,6 +58,8 @@ public sealed class EmailOptions
 {
     public const string Section = "Email";
 
+    public bool Enabled { get; set; } = false;
+    
     public string SmtpHost { get; set; } = "";
     public int SmtpPort { get; set; } = 587;
 

@@ -25,6 +25,10 @@ public sealed class YahooHtmlQuoteSource : IQuoteSource
         _log = log;
     }
 
+    public double GetDelaySeconds() => _options.DelayBetweenCallsSeconds;
+    
+    public bool UseThrottle() => true;
+
     public async Task<IReadOnlyList<DailyQuote>> GetDailyQuotesAsync(
         string ticker, DateOnly fromDate, DateOnly toDateInclusive, CancellationToken ct)
     {
@@ -36,7 +40,7 @@ public sealed class YahooHtmlQuoteSource : IQuoteSource
             throw RateLimitedException.FromResponse(response, ticker);
 
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"Yahoo! Finance returned HTTP {(int)response.StatusCode} for {ticker}.");
+            throw new HttpRequestException($"!! Yahoo! Finance returned HTTP {(int)response.StatusCode} for {ticker}.");
 
         string html = await response.Content.ReadAsStringAsync(ct);
         return ParseHistoryTable(html, ticker);

@@ -22,6 +22,10 @@ public sealed class YahooChartQuoteSource : IQuoteSource
         _log = log;
     }
 
+    public double GetDelaySeconds() => _options.DelayBetweenCallsSeconds;
+
+    public bool UseThrottle() => true;
+    
     public async Task<IReadOnlyList<DailyQuote>> GetDailyQuotesAsync(
         string ticker, DateOnly fromDate, DateOnly toDateInclusive, CancellationToken ct)
     {
@@ -33,7 +37,7 @@ public sealed class YahooChartQuoteSource : IQuoteSource
             throw RateLimitedException.FromResponse(response, ticker);
 
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"Yahoo! chart API returned HTTP {(int)response.StatusCode} for {ticker}.");
+            throw new HttpRequestException($"HTTP: Yahoo! chart API returned HTTP {(int)response.StatusCode} for {ticker}.");
 
         string json = await response.Content.ReadAsStringAsync(ct);
         return Parse(json, ticker);

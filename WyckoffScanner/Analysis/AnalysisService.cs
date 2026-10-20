@@ -63,7 +63,10 @@ public sealed class AnalysisService
 
         int workers = Math.Max(1, _options.MaxConcurrency);
         var counts = new int[Enum.GetValues<WyckoffFlag>().Length];
-        int analyzed = 0, skipped = 0, analysisErrors = 0, saveErrors = 0;
+        int analyzed = 0, 
+            skipped = 0, 
+            analysisErrors = 0, 
+            saveErrors = 0;
 
         _log.LogInformation("Analyzer: streaming mode, {Workers} worker(s), window {From:yyyy-MM-dd}..{To:yyyy-MM-dd}",
             workers, fromDate, runDate);

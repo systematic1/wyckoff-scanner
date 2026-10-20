@@ -55,6 +55,7 @@ public sealed class DataLoaderService
                 return;
             try
             {
+                _log.LogInformation($"Loader: Notify ticker data changed => {sym.Ticker}: {dataChanged}");
                 await onSymbolUpdated(new SymbolUpdate(sym, dataChanged), ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -115,14 +116,14 @@ public sealed class DataLoaderService
     private async Task<bool> BackfillAsync(SymbolRecord sym, DateOnly runDate, DateOnly target, CancellationToken ct)
     {
         DateOnly fromDate = runDate.AddYears(-1);
-        _log.LogInformation("{Ticker}: back-loading {From:yyyy-MM-dd} .. {To:yyyy-MM-dd}", sym.Ticker, fromDate, target);
+        _log.LogInformation(" => {Ticker}: back-loading {From:yyyy-MM-dd} .. {To:yyyy-MM-dd}", sym.Ticker, fromDate, target);
 
         var (quotes, error) = await FetchWithRetryAsync(sym.Ticker, fromDate, target, ct);
 
         if (quotes == null || quotes.Count == 0)
         {
             string msg = error ?? "No rows returned for back-load.";
-            _log.LogWarning("{Ticker}: back-load failed - {Message}", sym.Ticker, msg);
+            _log.LogWarning(" => {Ticker}: back-load failed - {Message}", sym.Ticker, msg);
             await _loadLog.UpsertAsync(sym.SymbolId, target, "backfill", "failed", 0, msg, ct);
             return false; // not marked complete -> retried at the next run
         }
@@ -131,7 +132,7 @@ public sealed class DataLoaderService
         await _symbols.MarkBackfillCompletedAsync(sym.SymbolId, ct);
         await _loadLog.UpsertAsync(sym.SymbolId, target, "backfill", "success", inserted, null, ct);
         _log.LogInformation(
-            "{Ticker}: back-load done, {Fetched} rows fetched, {Inserted} new.",
+            "<=  {Ticker}: back-load done, {Fetched} rows fetched, {Inserted} new.",
             sym.Ticker, 
             quotes.Count, 
             inserted);
@@ -141,13 +142,13 @@ public sealed class DataLoaderService
     /// <returns>True when new rows were stored.</returns>
     private async Task<bool> DailyLoadAsync(SymbolRecord sym, DateOnly target, CancellationToken ct)
     {
-        _log.LogInformation("{Ticker}: loading {Target:yyyy-MM-dd}", sym.Ticker, target);
+        _log.LogInformation(" => {Ticker}: loading {Target:yyyy-MM-dd}", sym.Ticker, target);
 
         var (quotes, error) = await FetchWithRetryAsync(sym.Ticker, target, target, ct);
 
         if (quotes == null)
         {
-            _log.LogWarning("{Ticker}: daily load failed - {Message}", sym.Ticker, error);
+            _log.LogWarning(" => {Ticker}: daily load failed - {Message}", sym.Ticker, error);
             await _loadLog.UpsertAsync(sym.SymbolId, target, "daily", "failed", 0, error, ct);
             return false;
         }
@@ -156,13 +157,13 @@ public sealed class DataLoaderService
         {
             // Not a failure: e.g. an unannounced market closure. Recorded so we don't call Yahoo again today.
             await _loadLog.UpsertAsync(sym.SymbolId, target, "daily", "no_data", 0, "No rows returned.", ct);
-            _log.LogInformation("{Ticker}: no data for {Target:yyyy-MM-dd}.", sym.Ticker, target);
+            _log.LogInformation(" => {Ticker}: no data for {Target:yyyy-MM-dd}.", sym.Ticker, target);
             return false;
         }
 
         int inserted = await _quotes.InsertNewAsync(sym.SymbolId, quotes, ct);
         await _loadLog.UpsertAsync(sym.SymbolId, target, "daily", "success", inserted, null, ct);
-        _log.LogInformation("{Ticker}: {Inserted} new row(s) inserted.", sym.Ticker, inserted);
+        _log.LogInformation("<=  {Ticker}: {Inserted} new row(s) inserted.", sym.Ticker, inserted);
         return inserted > 0;
     }
 
@@ -175,11 +176,17 @@ public sealed class DataLoaderService
 
         for (int attempt = 1; attempt <= attempts; attempt++)
         {
-            await _throttle.WaitAsync(ct);
+            if (_source.UseThrottle())
+                await _throttle.WaitAsync(ct);
+            
             try
             {
                 var quotes = await _source.GetDailyQuotesAsync(ticker, fromDate, toDate, ct);
-                _throttle.ReportSuccess();
+                if (_source.UseThrottle())
+                    _throttle.ReportSuccess();
+                else 
+                    DelayNextApiCall();
+                
                 return (quotes, null);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -193,10 +200,17 @@ public sealed class DataLoaderService
             catch (Exception ex)
             {
                 lastError = ex.Message;
-                _log.LogWarning("{Ticker}: attempt {Attempt}/{Max} failed - {Message}", ticker, attempt, attempts, ex.Message);
+                _log.LogWarning("** {Ticker}: attempt {Attempt}/{Max} failed - {Message}", ticker, attempt, attempts, ex.Message);
             }
         }
 
         return (null, lastError);
     }
+
+    private void DelayNextApiCall()
+    {
+        int delayTime = (int)_source.GetDelaySeconds() * 1000;
+        Thread.Sleep(delayTime);
+    }
+
 }

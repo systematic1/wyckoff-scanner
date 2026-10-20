@@ -4,18 +4,6 @@
 // Alternative daily-OHLCV source: Massive.com (formerly Polygon.io), "Custom Bars (OHLC)" endpoint
 //   GET https://api.massive.com/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}?adjusted=true&sort=asc&limit=50000
 //
-// HOW TO ADD IT (nothing else in the project needs to change)
-//   1. Drop this file into the project (e.g. WyckoffScanner/MassiveApi/MassiveQuoteSource.cs).
-//   2. In Program.cs, add ONE line AFTER the existing "services.AddSingleton<IQuoteSource>(...)" block:
-//          services.AddMassiveQuoteSource(cfg);
-//   3. Add to appsettings.json (keep the key out of the file: env var  Massive__ApiKey=...  works too):
-//          "Massive": { "Enabled": true, "ApiKey": "YOUR_KEY" }
-//      Set "Enabled": false (or remove the section) to go back to Yahoo! Finance.
-//
-// Everything else is reused: DataLoaderService still calls IQuoteSource, RequestThrottle still spaces the calls
-// (3 min + jitter, persisted), and an HTTP 429 raises the same RateLimitedException so the cooldown logic applies.
-// Note the spacing setting is still named Yahoo:DelayBetweenCallsMinutes - it governs whichever source is active.
-// Massive's plans have their own request limits, so you may safely lower it if your plan allows.
 // =====================================================================================================
 
 using System.Globalization;
@@ -49,6 +37,7 @@ public sealed class MassiveOptions
 
     /// <summary>Safety cap on next_url pages per request (one year of daily bars is a single page).</summary>
     public int MaxPages { get; set; } = 5;
+    public double DelayBetweenCallsSeconds { get; set; } = 15;
 }
 
 public sealed class MassiveQuoteSource : IQuoteSource
@@ -66,11 +55,15 @@ public sealed class MassiveQuoteSource : IQuoteSource
         _log = log;
     }
 
+    public double GetDelaySeconds() => _options.DelayBetweenCallsSeconds;
+
+    public bool UseThrottle() => false;
+
     public async Task<IReadOnlyList<DailyQuote>> GetDailyQuotesAsync(
         string ticker, DateOnly fromDate, DateOnly toDateInclusive, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
-            throw new InvalidOperationException("Massive:ApiKey is not configured.");
+            throw new InvalidOperationException("Massive: ApiKey is not configured.");
 
         string symbol = MapTicker(ticker);
         string fromStr = fromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -93,14 +86,14 @@ public sealed class MassiveQuoteSource : IQuoteSource
 
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                 throw new HttpRequestException(
-                    $"Massive rejected the request for {ticker} (HTTP {(int)response.StatusCode}): " +
+                    $"HTTP: Massive rejected the request for {ticker} (HTTP {(int)response.StatusCode}): " +
                     "invalid API key, or your plan does not include this data.");
 
             string body = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
             {
                 throw new HttpRequestException(
-                    $"Massive returned HTTP {(int)response.StatusCode} for {ticker}: {Truncate(body, 300)}");
+                    $"HTTP: Massive returned HTTP {(int)response.StatusCode} for {ticker}: {Truncate(body, 300)}");
             }
 
             url = ParsePage(body, ticker, quotes);

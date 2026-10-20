@@ -6,7 +6,7 @@ namespace WyckoffScanner.YahooFinance;
 
 /// <summary>
 /// Enforces the gap between calls to Yahoo! Finance:
-///  * at least <c>DelayBetweenCallsMinutes</c> (3) between calls, plus 0..<c>JitterSeconds</c> random extra so the
+///  * at least <c>DelayBetweenCallsSeconds</c> between calls, plus 0..<c>JitterSeconds</c> random extra so the
 ///    cadence is not machine-perfect;
 ///  * the last-call time is persisted in PostgreSQL, so restarting the app does not reset the clock;
 ///  * after an HTTP 429 the throttle blocks all calls until a cooldown (also persisted) has passed. The cooldown
@@ -16,6 +16,7 @@ namespace WyckoffScanner.YahooFinance;
 /// </summary>
 public sealed class RequestThrottle
 {
+    private readonly bool Enabled = false;
     private readonly TimeSpan _interval;
     private readonly double _jitterSeconds;
     private readonly YahooOptions _options;
@@ -30,7 +31,7 @@ public sealed class RequestThrottle
     public RequestThrottle(IOptions<YahooOptions> options, ThrottleRepository repo, ILogger<RequestThrottle> log)
     {
         _options = options.Value;
-        _interval = TimeSpan.FromMinutes(_options.DelayBetweenCallsMinutes);
+        _interval = TimeSpan.FromSeconds(_options.DelayBetweenCallsSeconds);
         _jitterSeconds = Math.Max(0, _options.JitterSeconds);
         _repo = repo;
         _log = log;
@@ -84,7 +85,7 @@ public sealed class RequestThrottle
         _blockedUntilUtc = DateTime.UtcNow + cooldown;
         await _repo.SetBlockedUntilAsync(_blockedUntilUtc, ct);
 
-        _log.LogWarning("Yahoo! Finance returned HTTP 429 ({Count} in a row). Pausing all requests for {Minutes:F0} minutes (until {Until:u}).",
+        _log.LogWarning("!! Yahoo! Finance returned HTTP 429 ({Count} in a row). Pausing all requests for {Minutes:F0} minutes (until {Until:u}).",
             _consecutiveRateLimits, cooldown.TotalMinutes, _blockedUntilUtc);
     }
 }

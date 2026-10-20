@@ -93,7 +93,7 @@ public sealed class DailyPipelineWorker : BackgroundService
 
     private async Task RunPipelineAsync(DateOnly today, JobRun job, CancellationToken ct)
     {
-        _log.LogInformation("=== Pipeline for {Date:yyyy-MM-dd} ===", today);
+        _log.LogInformation("PIPELINE:  === Pipeline for {Date:yyyy-MM-dd} ===", today);
 
         bool needLoader = job.LoaderCompletedAt == null;
         bool needAnalysis = job.AnalysisCompletedAt == null;
@@ -117,7 +117,7 @@ public sealed class DailyPipelineWorker : BackgroundService
         await _email.SendDailyReportAsync(today, ct);
         await _jobs.MarkStageCompleteAsync(today, JobStage.Email, ct);
 
-        _log.LogInformation("=== Pipeline for {Date:yyyy-MM-dd} complete; going dormant. ===", today);
+        _log.LogInformation("PIPELINE:  === Pipeline for {Date:yyyy-MM-dd} complete; going dormant. ===", today);
     }
 
     /// <summary>

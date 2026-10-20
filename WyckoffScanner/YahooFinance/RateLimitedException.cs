@@ -26,6 +26,6 @@ public sealed class RateLimitedException : Exception
         if (retryAfter.HasValue && retryAfter.Value < TimeSpan.Zero) 
             retryAfter = null;
         
-        return new RateLimitedException($"Yahoo! Finance rate-limited the request for {ticker} (HTTP 429).", retryAfter);
+        return new RateLimitedException($"!! Yahoo! Finance rate-limited the request for {ticker} (HTTP 429).", retryAfter);
     }
 }
