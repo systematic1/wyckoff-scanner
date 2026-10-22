@@ -4,14 +4,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using WyckoffScanner.AlternativeSources;
-using WyckoffScanner.Analysis;
-using WyckoffScanner.Configuration;
-using WyckoffScanner.Data;
-using WyckoffScanner.Loading;
-using WyckoffScanner.Notifications;
-using WyckoffScanner.Scheduling;
-using WyckoffScanner.YahooFinance;
+using WyckoffScanner.Lib.AlternativeSources;
+using WyckoffScanner.Lib.Analysis;
+using WyckoffScanner.Lib.Configuration;
+using WyckoffScanner.Lib.Data;
+using WyckoffScanner.Lib.Loading;
+using WyckoffScanner.Lib.Notifications;
+using WyckoffScanner.Lib.Scheduling;
+using WyckoffScanner.Lib.YahooFinance;
 
 // Dapper: DateOnly <-> date, and snake_case columns -> PascalCase properties.
 SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
@@ -70,14 +70,12 @@ HttpMessageHandler CreateHandler() => new HttpClientHandler
 };
 
 // Configure for the selected ApiToUse setting ("Massive", "Alpaca", or "Yahoo")
-string apiToUse = cfg.GetValue<string>("ApiToUse", "massive") ?? "massive";
+string apiToUse = cfg.GetValue<string>("ApiToUse", "massive");
 switch (apiToUse.ToLower())
 {
     case "massive":
         services.AddHttpClient<MassiveQuoteSource>();
         services.AddMassiveQuoteSource(cfg);
-        //services.AddSingleton(new MassiveOptions());
-        //services.AddSingleton<IQuoteSource, MassiveQuoteSource>();
         break;
     
     case "alpaca":
@@ -114,7 +112,9 @@ var serviceProvider = services.BuildServiceProvider();
 var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
 
 logger.LogInformation($"============ Wyckoff scanner started at {DateTime.Now} ===========");
-logger.LogInformation($" *  Using market API: {apiToUse}");
-logger.LogInformation($" *  Email notifications sent to: {email.To}");
+logger.LogInformation($"Using market API: {apiToUse}");
+
+if (email.Enabled)
+    logger.LogInformation($"Email notifications sent to: {email.To}");
 
 await builder.Build().RunAsync();

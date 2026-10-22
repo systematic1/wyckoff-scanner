@@ -6,18 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>WyckoffScanner</RootNamespace>
-    <AssemblyName>WyckoffScanner</AssemblyName>
     <UserSecretsId>wyckoff-scanner-6f1c2b7a</UserSecretsId>
+    <PackageId>WyckoffScanner</PackageId>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.35" />
-    <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
-    <PackageReference Include="MailKit" Version="4.8.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
-    <PackageReference Include="Npgsql" Version="8.0.3" />
-  </ItemGroup>
 
   <ItemGroup>
     <Using Include="Microsoft.Extensions.Logging" />
@@ -27,6 +18,10 @@
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WyckoffScanner.Lib\WyckoffScanner.Lib.csproj" />
   </ItemGroup>
 
 </Project>
