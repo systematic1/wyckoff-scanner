@@ -24,7 +24,7 @@ public sealed class WyckoffAnalyzer
     private readonly PatternEngine _accumulation;
     private readonly PatternEngine _distribution;
 
-    public WyckoffAnalyzer(IOptions<AnalyzerOptions> options)
+    public WyckoffAnalyzer(IOptions<AnalyzerOptions> options) 
     {
         _o = options.Value;
         _accumulation = new PatternEngine(_o);

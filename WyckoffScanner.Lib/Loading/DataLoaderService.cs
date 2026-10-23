@@ -169,7 +169,7 @@ public sealed class DataLoaderService
     }
 
     /// <summary>Each attempt is one Yahoo call and therefore waits for the 3-minute throttle first.</summary>
-    private async Task<(IReadOnlyList<DailyQuote>? Quotes, string? Error)> FetchWithRetryAsync(
+    public async Task<(IReadOnlyList<DailyQuote>? Quotes, string? Error)> FetchWithRetryAsync(
         string ticker, DateOnly fromDate, DateOnly toDate, CancellationToken ct)
     {
         string? lastError = null;

@@ -23,7 +23,7 @@ public sealed class AnalysisService
 
     public AnalysisService(
         SymbolRepository symbols, QuoteRepository quotes, AnalysisRepository results,
-        WyckoffAnalyzer analyzer, IOptions<AnalyzerOptions> options, ILogger<AnalysisService> log)
+        WyckoffAnalyzer analyzer, IOptions<AnalyzerOptions> options, ILogger<AnalysisService> log) 
     {
         _symbols = symbols;
         _quotes = quotes;

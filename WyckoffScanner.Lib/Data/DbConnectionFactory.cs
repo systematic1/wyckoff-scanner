@@ -13,6 +13,11 @@ public sealed class DbConnectionFactory : IAsyncDisposable
         _dataSource = NpgsqlDataSource.Create(options.Value.ConnectionString);
     }
 
+    public DbConnectionFactory(string connectionString)
+    {
+        _dataSource = NpgsqlDataSource.Create(connectionString);
+    }
+
     public async Task<NpgsqlConnection> OpenAsync(CancellationToken ct) =>
         await _dataSource.OpenConnectionAsync(ct);
 
