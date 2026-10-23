@@ -57,7 +57,7 @@ public sealed class AnalysisService
     /// </summary>
     public async Task ProcessAsync(DateOnly runDate, ChannelReader<SymbolUpdate> updates, CancellationToken ct)
     {
-        DateOnly fromDate = runDate.AddYears(-_options.LookbackYears);
+        DateOnly fromDate = runDate.AddMonths(-_options.LookbackMonths);
         var alreadyAnalyzed = new ConcurrentDictionary<int, byte>();
         foreach (int id in await _results.GetAnalyzedSymbolIdsAsync(runDate, ct))
             alreadyAnalyzed[id] = 0;

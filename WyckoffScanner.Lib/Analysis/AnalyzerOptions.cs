@@ -8,7 +8,7 @@ public sealed class AnalyzerOptions
 {
     public const string Section = "Analyzer";
 
-    public int LookbackYears { get; set; } = 1;
+    public int LookbackMonths { get; set; } = 12;
     public int MinBars { get; set; } = 60;
 
     /// <summary>Bars on each side that must be higher for a bar to count as a swing low (SC candidate).</summary>
