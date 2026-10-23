@@ -33,7 +33,7 @@ public sealed class EmailNotifier
             _log.LogInformation("Email notification are disabled.");
             return;
         }
-        
+
         var flagged = await _results.GetFlaggedAsync(analysisDate, ct);
 
         if (flagged.Count == 0 && !_options.SendWhenEmpty)
@@ -42,6 +42,11 @@ public sealed class EmailNotifier
             return;
         }
 
+        await SendMessage(flagged, analysisDate, ct);
+    }
+    
+    public async Task SendMessage(IReadOnlyList<FlaggedSymbol> flagged, DateOnly analysisDate, CancellationToken ct)
+    {
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(_options.From));
         foreach (var to in _options.To.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using WyckoffScanner.Lib.AlternativeSources;
@@ -7,6 +8,7 @@ using WyckoffScanner.Lib.Configuration;
 using WyckoffScanner.Lib.Data;
 using WyckoffScanner.Lib.Loading;
 using WyckoffScanner.Lib.Models;
+using WyckoffScanner.Lib.Notifications;
 using WyckoffScanner.Lib.Scheduling;
 using WyckoffScanner.Lib.YahooFinance;
 
@@ -38,6 +40,9 @@ class TesterProgram
         var loader = new DataLoaderService(source, throttle, symbolRepo, quoteRepo, loadLog, calendar, yahooOptions, NullLogger<DataLoaderService>.Instance);
         var analyzer = new WyckoffAnalyzer(Options.Create(analyzerOptions!));
 
+        var emailOptions = Configuration.GetSection("Email").Get<EmailOptions>();
+        var notifier = new EmailNotifier(new AnalysisRepository(dbFactory), Options.Create(emailOptions), NullLogger<EmailNotifier>.Instance);
+        
         string symbol = string.Empty;
         
         Console.WriteLine("=========== Wyckoff Analysis Logic Tester ==========");
@@ -55,7 +60,10 @@ class TesterProgram
             symbol = symbol.ToUpper();
             IReadOnlyList<DailyQuote>? historyData = await LoadDataFromApi(symbol, loader, analyzerOptions!.LookbackMonths);
             if (historyData is not null && historyData.Count != 0)
-                await AnalyzeAndDisplayResults(symbol, historyData, analyzer);
+            {
+                var analysisResult = await AnalyzeAndDisplayResults(symbol, historyData, analyzer);
+                //await EmailTest(notifier, analysisResult);
+            }
             else 
                 Console.WriteLine("No quote data was returned.");
         }
@@ -79,7 +87,7 @@ class TesterProgram
         return null;
     }
 
-    static async Task AnalyzeAndDisplayResults(string symbol, IReadOnlyList<DailyQuote> historyData, WyckoffAnalyzer analyzer)
+    static async Task<AnalysisResult> AnalyzeAndDisplayResults(string symbol, IReadOnlyList<DailyQuote> historyData, WyckoffAnalyzer analyzer)
     {
         AnalysisResult result = analyzer.Analyze(symbol, historyData);
         
@@ -100,8 +108,10 @@ class TesterProgram
                 $"General Pattern Detected?             {result.Pattern.ToString()}");
 
             Console.WriteLine($"Patterns (number of areas):           {result.AccumulationCount}");
-            Console.WriteLine($"Phase Determination:                  {result.FlagMessage}");
-
+            
+            WriteTextColoredByCondition(
+                result.FlagMessage != "None",
+                $"Phase Determination:                  {result.FlagMessage}");
             WriteTextColoredByCondition(
                 result.SellingExhaustion,
                 $"Selling/Buying Exhaustion Detected?   {(result.SellingExhaustion ? "Yes" : "No")}");
@@ -114,15 +124,17 @@ class TesterProgram
             WriteTextColoredByCondition(
                 result.SignOfStrength,
                 $"Sign Of Strength/Weakness Detected?   {(result.SignOfStrength ? "Yes" : "No")}");
-        }
 
-        Console.WriteLine($"Resistance Level:                     ${result.Resistance}");
-        Console.WriteLine($"Support Level:                        ${result.Support}");
+            Console.WriteLine($"Resistance Level:                     ${result.Resistance}");
+            Console.WriteLine($"Support Level:                        ${result.Support}");
+        }
 
         Console.WriteLine($"Number of bars analyzed:              {result.BarsAnalyzed}");
         Console.WriteLine($"Last Date Analyzed:                   {result.LastDate}");
         Console.WriteLine($"Last Close Price:                     ${result.LastClose}");
         Console.WriteLine();
+
+        return result;
     }
 
     static void WriteTextColoredByCondition(bool condition, string text)
@@ -132,5 +144,25 @@ class TesterProgram
         Console.WriteLine(text);
         Console.ForegroundColor = defaultColor;
     }
-    
+
+    static async Task EmailTest(EmailNotifier notifier, AnalysisResult result)
+    {
+        FlaggedSymbol flagged = new FlaggedSymbol()
+        {
+            Ticker = result.Ticker,
+            Flag = result.Flag.ToString(),
+            Details = result.Details,
+            FlagMessage = result.FlagMessage,
+            LastClose = (decimal)result.LastClose,
+            Pattern = result.Pattern.ToString(),
+            ResistancePrice = (decimal)(result.Resistance ?? 0d),
+            SupportPrice =  (decimal)(result.Support ?? 0d)
+        };
+        
+        DateOnly today = DateOnly.FromDateTime(DateTime.Now);
+        var flagList = new List<FlaggedSymbol>();
+        flagList.Add(flagged);
+        
+        await notifier.SendMessage(flagList.AsReadOnly(), today, CancellationToken.None);
+    }
 }
