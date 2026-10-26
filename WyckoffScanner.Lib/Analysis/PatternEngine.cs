@@ -4,25 +4,34 @@ using WyckoffScanner.Lib.Models;
 namespace WyckoffScanner.Lib.Analysis;
 
 /// <summary>Best candidate found by a <see cref="PatternEngine"/>. Flag is the accumulation-style stage (1..3).</summary>
-    internal sealed class Candidate
-    {
-        public SellingExhaustion Exhaustion { get; init; } = null!;
-        public AutomaticRally? Rally { get; set; }
-        public List<AccumulationZone> Zones { get; set; } = new();
-        public SpringInfo? Spring { get; set; }
-        public SosInfo? Sos { get; set; }
-        public WyckoffFlag Flag { get; set; } = WyckoffFlag.None;
+internal sealed class Candidate
+{
+    public SellingExhaustion Exhaustion { get; init; } = null!;
+    public AutomaticRally? Rally { get; set; }
+    public List<AccumulationZone> Zones { get; set; } = new();
+    public SpringInfo? Spring { get; set; }
+    public SosInfo? Sos { get; set; }
+    public WyckoffFlag Flag { get; set; } = WyckoffFlag.None;
 
-        public int Rank =>
-            (int)Flag * 10 + 1 + (Rally != null ? 1 : 0) + (Zones.Count > 0 ? 1 : 0) +
-            (Spring != null ? 1 : 0) + (Sos != null ? 1 : 0);
-    }
+    /// <summary>Sharp (V-style bounce) or Rounded (gradual volume fade, saucer shape).</summary>
+    public ClimaxStyle Style => Exhaustion.Style;
+
+    public int Rank =>
+        (int)Flag * 10 + 1 + (Rally != null ? 1 : 0) + (Zones.Count > 0 ? 1 : 0) +
+        (Spring != null ? 1 : 0) + (Sos != null ? 1 : 0);
+}
 
 
 /// <summary>
 /// The five-phase detector (selling exhaustion -> automatic rally -> accumulation -> spring -> sign of strength).
 /// It always looks for the bullish sequence in the series it is given. Distribution is found by feeding it a
 /// price-inverted series (see <see cref="PriceSeries"/>) with options from <see cref="AnalyzerOptions.ForDistribution"/>.
+///
+/// Phase 1/2 come in two styles that share everything from phase 3 onwards:
+///   Sharp   - big range expansion, fading daily swings, climax volume, then a quick bounce on moderate volume.
+///   Rounded - volume peaks mid-decline and fades steadily into the low, the fall decelerates, price forms a bowl
+///             (parabola fit) and recovers gradually with higher lows.
+/// Both styles are evaluated and the most advanced candidate wins.
 /// Stateless, so one instance can be used from many threads.
 /// </summary>
 internal sealed class PatternEngine
@@ -34,30 +43,54 @@ internal sealed class PatternEngine
     public Candidate? FindBest(PriceSeries s)
     {
         Candidate? best = null;
-        foreach (int low in FindPivotLows(s))
+
+        foreach (int low in FindPivotLows(s, _o.PivotWindow))
         {
-            var c = EvaluateCandidate(s, low);
-            if (c == null) 
-                continue;
-            if (best == null || c.Rank >= best.Rank) 
-                best = c; // chronological order: later wins ties
+            var c = EvaluateCandidate(s, low, ClimaxStyle.Sharp);
+            if (c != null && IsBetter(c, best))
+                best = c;
         }
+
+        if (_o.DetectRoundedClimax)
+        {
+            foreach (int low in FindPivotLows(s, _o.RoundedPivotWindow))
+            {
+                var c = EvaluateCandidate(s, low, ClimaxStyle.Rounded);
+                if (c != null && IsBetter(c, best))
+                    best = c;
+            }
+        }
+
         return best;
+    }
+
+    /// <summary>Higher rank wins; on equal rank the later low wins (same low: the first one found, i.e. sharp, is kept).</summary>
+    private static bool IsBetter(Candidate c, Candidate? best)
+    {
+        if (best == null) 
+            return true;
+        if (c.Rank != best.Rank) 
+            return c.Rank > best.Rank;
+        return c.Exhaustion.LowIndex > best.Exhaustion.LowIndex;
     }
 
     // ------------------------------------------------------------------------------------------------
     // Candidate evaluation
     // ------------------------------------------------------------------------------------------------
 
-    private Candidate? EvaluateCandidate(PriceSeries s, int lowIdx)
+    private Candidate? EvaluateCandidate(PriceSeries s, int lowIdx, ClimaxStyle style)
     {
-        var ex = DetectSellingExhaustion(s, lowIdx);
+        var ex = style == ClimaxStyle.Sharp
+            ? DetectSellingExhaustion(s, lowIdx)
+            : DetectRoundedExhaustion(s, lowIdx);
         if (ex == null) 
             return null;
 
         var cand = new Candidate { Exhaustion = ex };
 
-        var ar = DetectAutomaticRally(s, ex);
+        var ar = style == ClimaxStyle.Sharp
+            ? DetectAutomaticRally(s, ex)
+            : DetectGradualRecovery(s, ex);
         if (ar == null) 
             return cand;
 
@@ -120,9 +153,8 @@ internal sealed class PatternEngine
     // Swing lows
     // ------------------------------------------------------------------------------------------------
 
-    private IEnumerable<int> FindPivotLows(PriceSeries s)
+    private static IEnumerable<int> FindPivotLows(PriceSeries s, int w)
     {
-        int w = _o.PivotWindow;
         for (int i = w; i < s.Count - w; i++)
         {
             bool isLow = true;
@@ -137,8 +169,8 @@ internal sealed class PatternEngine
     }
 
     // ------------------------------------------------------------------------------------------------
-    // 1. Selling exhaustion: a sizeable decline whose daily price swings were large and then gradually shrank
-    //    into the low, with a volume climax around the peak of the selling.
+    // 1a. Selling exhaustion (SHARP): a sizeable decline whose daily price swings were large and then gradually
+    //     shrank into the low, with a volume climax around the peak of the selling.
     // ------------------------------------------------------------------------------------------------
 
     private SellingExhaustion? DetectSellingExhaustion(PriceSeries s, int low)
@@ -192,7 +224,84 @@ internal sealed class PatternEngine
     }
 
     // ------------------------------------------------------------------------------------------------
-    // 2. Automatic rally: selling stops, price bounces on moderate (not climactic) volume.
+    // 1b. Selling exhaustion (ROUNDED): a longer decline where volume peaks mid-leg and then fades steadily into the
+    //     low, the fall decelerates, and the closes from the decline high through the early recovery trace a bowl.
+    // ------------------------------------------------------------------------------------------------
+
+    private SellingExhaustion? DetectRoundedExhaustion(PriceSeries s, int low)
+    {
+        int start = Math.Max(0, low - _o.MaxDeclineLookbackBars);
+        if (low - start < _o.RoundedMinDeclineBars) 
+            return null;
+
+        int high = start;
+        for (int i = start; i < low; i++)
+            if (s.High[i] >= s.High[high]) high = i;
+
+        int len = low - high;
+        if (len < _o.RoundedMinDeclineBars) 
+            return null;
+
+        double decline = (s.High[high] - s.Low[low]) / s.High[high];
+        if (decline < _o.MinDeclinePct) 
+            return null;
+
+        // Volume peak somewhere in the decline, leaving a long enough tail for the fade.
+        int peakMax = low - _o.RoundedMinTailBars;
+        if (peakMax < high + 1) 
+            return null;
+
+        int peak = high + 1;
+        for (int i = high + 1; i <= peakMax; i++)
+        {
+            if (s.SmoothedVolume[i] > s.SmoothedVolume[peak]) 
+                peak = i;
+        }
+
+        double peakVol = s.SmoothedVolume[peak];
+        if (peakVol < _o.RoundedClimaxVolumeMultiple * s.MedianVolume) 
+            return null;
+
+        // Volume must fade steadily into the low.
+        int endFrom = Math.Max(peak + 1, low - 4);
+        double tailVol = PriceSeries.Mean(s.Volume, endFrom, low);
+        double fade = tailVol / peakVol;
+        if (fade > _o.RoundedMaxVolumeFadeRatio) 
+            return null;
+        if (PriceSeries.Slope(s.SmoothedVolume, peak, low) >= 0) 
+            return null;
+
+        // Price must decelerate: the last third of the fall is clearly flatter than the first third.
+        int third = Math.Max(2, len / 3);
+        double firstSlope = PriceSeries.Slope(s.Close, high, high + third);
+        double lastSlope = PriceSeries.Slope(s.Close, low - third, low);
+        if (firstSlope >= 0 || lastSlope < firstSlope * _o.RoundedMaxDecelRatio) 
+            return null;
+
+        // Bowl: parabola through decline + early recovery, opening upwards, turning point near the low.
+        int after = Math.Min(s.Count - 1 - low, _o.RoundedRecoveryBars);
+        if (after < _o.RoundedMinRecoveryBars) 
+            return null;       // not enough bars after the low to confirm the shape
+
+        if (!PriceSeries.FitParabola(s.Close, high, low + after, out double a, out double vertex, out double r2))
+            return null;
+        if (a <= 0 || r2 < _o.RoundedMinRSquared || Math.Abs(vertex - low) > _o.RoundedVertexToleranceBars) 
+            return null;
+
+        double peakIntensity = s.SmoothedTrPct[peak];
+        double endIntensity = PriceSeries.Mean(s.TrPct, endFrom, low);
+
+        int vFrom = Math.Max(0, peak - 2), vTo = Math.Min(s.Count - 1, peak + 2);
+        double climaxVol = 0;
+        for (int i = vFrom; i <= vTo; i++)
+            climaxVol = Math.Max(climaxVol, s.Volume[i]);
+
+        return new SellingExhaustion(high, peak, low, decline, peakIntensity, endIntensity,
+            climaxVol, climaxVol / s.MedianVolume, ClimaxStyle.Rounded, fade, r2);
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // 2a. Automatic rally (SHARP): selling stops, price bounces on moderate (not climactic) volume.
     // ------------------------------------------------------------------------------------------------
 
     private AutomaticRally? DetectAutomaticRally(PriceSeries s, SellingExhaustion ex)
@@ -229,6 +338,49 @@ internal sealed class PatternEngine
             return null;     // moderate = quieter than the selling climax
 
         return new AutomaticRally(a, s.High[a], rallyPct, retrace, volRatio);
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // 2b. Gradual recovery (ROUNDED): price climbs out of the bowl over many bars with higher lows on quiet volume.
+    //     A recovery that is still in progress at the last bar is accepted (the candidate then simply has no
+    //     accumulation box yet).
+    // ------------------------------------------------------------------------------------------------
+
+    private AutomaticRally? DetectGradualRecovery(PriceSeries s, SellingExhaustion ex)
+    {
+        int low = ex.LowIndex;
+        int end = Math.Min(s.Count - 1, low + _o.RoundedMaxRecoveryBars);
+        if (end - low < _o.RoundedMinRecoveryBars) 
+            return null;
+
+        int a = low + 1;
+        for (int i = low + 1; i <= end; i++)
+        {
+            if (s.High[i] >= s.High[a])
+                a = i;
+        }
+
+        if (a - low < _o.RoundedMinRecoveryBars) 
+            return null;      // too quick to be a gradual recovery (the sharp detector covers that)
+
+        double rise = s.High[a] - s.Low[low];
+        double rallyPct = rise / s.Low[low];
+        double declineAmt = s.High[ex.HighIndex] - s.Low[low];
+        double retrace = declineAmt > 0 ? rise / declineAmt : 0;
+        if (rallyPct < _o.RoundedMinRecoveryPct || retrace < _o.MinRetraceOfDecline) 
+            return null;
+
+        if (PriceSeries.Slope(s.Low, low, a) <= 0) 
+            return null;              // no pattern of higher lows
+
+        double avgVol = PriceSeries.Mean(s.Volume, low + 1, a);
+        double volRatio = avgVol / s.MedianVolume;
+        if (volRatio > _o.RallyVolumeMaxRatio) 
+            return null;
+        if (avgVol >= ex.ClimaxVolume) 
+            return null;
+
+        return new AutomaticRally(a, s.High[a], rallyPct, retrace, volRatio, Gradual: true);
     }
 
     // ------------------------------------------------------------------------------------------------

@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using WyckoffScanner.Lib.AlternativeSources;
@@ -41,7 +40,7 @@ class TesterProgram
         var analyzer = new WyckoffAnalyzer(Options.Create(analyzerOptions!));
 
         var emailOptions = Configuration.GetSection("Email").Get<EmailOptions>();
-        var notifier = new EmailNotifier(new AnalysisRepository(dbFactory), Options.Create(emailOptions), NullLogger<EmailNotifier>.Instance);
+        var notifier = new EmailNotifier(new AnalysisRepository(dbFactory), Options.Create(emailOptions!), NullLogger<EmailNotifier>.Instance);
         
         string symbol = string.Empty;
         

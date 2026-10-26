@@ -25,7 +25,7 @@ public sealed class AnalyzerOptions
     /// <summary>Automatic reaction: minimum drop from the climax high, as a fraction of that high. Mirror of <see cref="MinRallyPct"/>.</summary>
     public double MinReactionPct { get; set; } = 0.06;
 
-    // ---- 1. Selling exhaustion (selling climax) ------------------------------------------------
+    // ---- 1. Selling exhaustion (selling climax) - SHARP variant ---------------------------------
     public int MaxDeclineLookbackBars { get; set; } = 60;
     public int MinDeclineBars { get; set; } = 5;
     /// <summary>Minimum peak-to-low decline of the selling leg.</summary>
@@ -40,6 +40,42 @@ public sealed class AnalyzerOptions
     public double MaxExhaustionDecayRatio { get; set; } = 0.70;
     /// <summary>Volume around the intensity peak must be this multiple of median volume (0 disables).</summary>
     public double ClimaxVolumeMultiple { get; set; } = 1.3;
+
+    // ---- 1b. Selling exhaustion - ROUNDED variant (gradual volume fade, saucer-shaped bottom) -----
+    /// <summary>
+    /// Also look for rounded climaxes: volume peaks mid-decline then fades steadily into the low, the decline decelerates,
+    /// and price curves into a bowl instead of bouncing sharply. Runs in addition to the sharp detector; the better
+    /// (more advanced) candidate wins. Distribution gets the same treatment on the inverted series (rounded top).
+    /// </summary>
+    public bool DetectRoundedClimax { get; set; } = true;
+    /// <summary>Bars on each side that must be higher for a rounded low (wider than <see cref="PivotWindow"/> because bowls are broad).</summary>
+    public int RoundedPivotWindow { get; set; } = 8;
+    /// <summary>A rounded decline needs more bars than a sharp one.</summary>
+    public int RoundedMinDeclineBars { get; set; } = 15;
+    /// <summary>Bars used to smooth volume when tracking the fade.</summary>
+    public int VolumeSmoothingBars { get; set; } = 5;
+    /// <summary>Bars between the smoothed-volume peak and the low (the fading tail).</summary>
+    public int RoundedMinTailBars { get; set; } = 8;
+    /// <summary>Smoothed volume at its peak must be this multiple of median volume.</summary>
+    public double RoundedClimaxVolumeMultiple { get; set; } = 1.2;
+    /// <summary>Average volume of the last bars into the low must be at most this fraction of the peak smoothed volume.</summary>
+    public double RoundedMaxVolumeFadeRatio { get; set; } = 0.65;
+    /// <summary>
+    /// Deceleration: the price slope over the last third of the decline must be at most this fraction of the slope over
+    /// the first third (0.6 = the fall must have slowed by at least 40%).
+    /// </summary>
+    public double RoundedMaxDecelRatio { get; set; } = 0.60;
+    /// <summary>Bars after the low included when fitting the bowl (and the minimum that must exist to confirm the shape).</summary>
+    public int RoundedRecoveryBars { get; set; } = 25;
+    public int RoundedMinRecoveryBars { get; set; } = 8;
+    /// <summary>Minimum R-squared of the parabola fitted through the closes from the decline high to the recovery.</summary>
+    public double RoundedMinRSquared { get; set; } = 0.60;
+    /// <summary>The parabola's turning point must lie within this many bars of the low.</summary>
+    public int RoundedVertexToleranceBars { get; set; } = 6;
+    /// <summary>How far past the low to search for the top of the gradual recovery.</summary>
+    public int RoundedMaxRecoveryBars { get; set; } = 40;
+    /// <summary>Gradual recovery: minimum rise from the low. (For distribution: minimum drop from the high; converted automatically.)</summary>
+    public double RoundedMinRecoveryPct { get; set; } = 0.05;
 
     // ---- 2. Automatic rally ---------------------------------------------------------------------
     public int AutoRallyMaxBars { get; set; } = 20;
@@ -95,6 +131,7 @@ public sealed class AnalyzerOptions
         var m = (AnalyzerOptions)MemberwiseClone();
         m.MinDeclinePct = MinAdvancePct / (1 + MinAdvancePct);
         m.MinRallyPct = MinReactionPct / (1 - MinReactionPct);
+        m.RoundedMinRecoveryPct = RoundedMinRecoveryPct / (1 - RoundedMinRecoveryPct);
         m.StructureBreakdownPct = StructureBreakdownPct / (1 + StructureBreakdownPct);
         m.MinSpringPiercePct = MinSpringPiercePct / (1 + MinSpringPiercePct);
         m.MaxSpringPiercePct = MaxSpringPiercePct / (1 + MaxSpringPiercePct);

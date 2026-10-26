@@ -17,6 +17,8 @@ internal sealed class PriceSeries
     public double[] TrPct { get; }
     /// <summary>Simple moving average of <see cref="TrPct"/> (smoothing bars).</summary>
     public double[] SmoothedTrPct { get; }
+    /// <summary>Simple moving average of <see cref="Volume"/>; used to follow the gradual volume fade of a rounded climax.</summary>
+    public double[] SmoothedVolume { get; }
 
     public double MedianVolume { get; }
     public double MedianTrPct { get; }
@@ -27,7 +29,7 @@ internal sealed class PriceSeries
     /// accumulation detector run on the mirrored series finds the bearish distribution pattern in the original.
     /// All prices must be &gt; 0 (check with <see cref="AllPricesPositive"/>).
     /// </summary>
-    public PriceSeries(IReadOnlyList<DailyQuote> quotes, int smoothingBars, bool mirror = false)
+    public PriceSeries(IReadOnlyList<DailyQuote> quotes, int smoothingBars, bool mirror = false, int volumeSmoothingBars = 5)
     {
         Count = quotes.Count;
         Dates = new DateOnly[Count];
@@ -38,6 +40,7 @@ internal sealed class PriceSeries
         Volume = new double[Count];
         TrPct = new double[Count];
         SmoothedTrPct = new double[Count];
+        SmoothedVolume = new double[Count];
 
         for (int i = 0; i < Count; i++)
         {
@@ -72,6 +75,10 @@ internal sealed class PriceSeries
         int k = Math.Max(1, smoothingBars);
         for (int i = 0; i < Count; i++)
             SmoothedTrPct[i] = Mean(TrPct, Math.Max(0, i - k + 1), i);
+
+        int kv = Math.Max(1, volumeSmoothingBars);
+        for (int i = 0; i < Count; i++)
+            SmoothedVolume[i] = Mean(Volume, Math.Max(0, i - kv + 1), i);
 
         MedianVolume = Median(Volume);
         MedianTrPct = Median(TrPct);
@@ -134,4 +141,63 @@ internal sealed class PriceSeries
         
         return (den == 0 ? 0 : (n * sxy - sx * sy) / den);
     }
+
+    /// <summary>
+    /// Least-squares parabola y = c + b·x + a·x² through y[start..toInclusive] (x scaled to 0..1, y scaled by its mean
+    /// so the result is independent of price level). <paramref name="a"/> &gt; 0 means a bowl (rounded bottom).
+    /// <paramref name="vertexIndex"/> is the bar index of the parabola's turning point (may lie outside the window);
+    /// <paramref name="r2"/> is the goodness of fit (1 = perfect).
+    /// </summary>
+    public static bool FitParabola(double[] y, int start, int toInclusive, out double a, out double vertexIndex, out double r2)
+    {
+        a = 0; vertexIndex = 0; r2 = 0;
+        int n = toInclusive - start + 1;
+        if (n < 5) 
+            return false;
+
+        double mean = Mean(y, start, toInclusive);
+        if (mean <= 0) 
+            return false;
+
+        double s1 = 0, s2 = 0, s3 = 0, s4 = 0, t0 = 0, t1 = 0, t2 = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double x = (double)i / (n - 1);
+            double x2 = x * x;
+            double v = y[start + i] / mean;
+            s1 += x; s2 += x2; s3 += x2 * x; s4 += x2 * x2;
+            t0 += v; t1 += x * v; t2 += x2 * v;
+        }
+
+        double s0 = n;
+        double det = Det3(s0, s1, s2, s1, s2, s3, s2, s3, s4);
+        if (Math.Abs(det) < 1e-12) 
+            return false;
+
+        double c = Det3(t0, s1, s2, t1, s2, s3, t2, s3, s4) / det;
+        double b = Det3(s0, t0, s2, s1, t1, s3, s2, t2, s4) / det;
+        double qa = Det3(s0, s1, t0, s1, s2, t1, s2, s3, t2) / det;
+        if (Math.Abs(qa) < 1e-12) 
+            return false;
+
+        double meanV = t0 / n, ssRes = 0, ssTot = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double x = (double)i / (n - 1);
+            double v = y[start + i] / mean;
+            double fit = c + b * x + qa * x * x;
+            ssRes += (v - fit) * (v - fit);
+            ssTot += (v - meanV) * (v - meanV);
+        }
+
+        r2 = ssTot > 0 ? 1.0 - ssRes / ssTot : 0;
+        a = qa;
+        vertexIndex = start + (-b / (2.0 * qa)) * (n - 1);
+        return true;
+    }
+
+    private static double Det3(double a11, double a12, double a13,
+                               double a21, double a22, double a23,
+                               double a31, double a32, double a33) =>
+        a11 * (a22 * a33 - a23 * a32) - a12 * (a21 * a33 - a23 * a31) + a13 * (a21 * a32 - a22 * a31);
 }

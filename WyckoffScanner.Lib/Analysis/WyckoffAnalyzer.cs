@@ -11,7 +11,11 @@ namespace WyckoffScanner.Lib.Analysis;
 ///   Accumulation: selling exhaustion -> automatic rally   -> accumulation box(es) -> spring    -> sign of strength
 ///   Distribution: buying climax      -> automatic reaction -> distribution box(es) -> upthrust  -> sign of weakness
 ///
-/// Both run through the same <see cref="PatternEngine"/>. Distribution is the reverse polarity: the engine is run on a
+/// Each climax can be SHARP (violent range expansion, quick bounce/reaction) or ROUNDED (volume fades gradually and
+/// price traces a saucer at the bottom / dome at the top). Both styles are detected; the style is reported in
+/// <see cref="AnalysisResult.Details"/>.
+///
+/// Both halves run through the same <see cref="PatternEngine"/>. Distribution is the reverse polarity: the engine is run on a
 /// price-inverted copy of the series (see <see cref="PriceSeries"/>), so no detection rule is duplicated. If both
 /// patterns are present the one whose latest event is more recent is reported.
 ///
@@ -45,7 +49,7 @@ public sealed class WyckoffAnalyzer
             return result;
         }
 
-        var s = new PriceSeries(quotes, _o.SmoothingBars);
+        var s = new PriceSeries(quotes, _o.SmoothingBars, volumeSmoothingBars: _o.VolumeSmoothingBars);
         result.LastClose = s.Close[^1];
         result.LastDate = s.Dates[^1];
 
@@ -60,7 +64,7 @@ public sealed class WyckoffAnalyzer
         Candidate? dist = null;
         if (_o.DetectDistribution && PriceSeries.AllPricesPositive(quotes))
         {
-            var mirrored = new PriceSeries(quotes, _o.SmoothingBars, mirror: true);
+            var mirrored = new PriceSeries(quotes, _o.SmoothingBars, mirror: true, volumeSmoothingBars: _o.VolumeSmoothingBars);
             if (mirrored.MedianVolume > 0 && mirrored.MedianTrPct > 0)
                 dist = _distribution.FindBest(mirrored);
         }
@@ -163,18 +167,27 @@ public sealed class WyckoffAnalyzer
 
     private static string F(FormattableString fs) => fs.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>Sentence fragment describing how the climax behaved (sharp swings vs. rounded volume fade), shared by both directions.</summary>
+    private static string ClimaxBehaviour(SellingExhaustion ex) =>
+        ex.Style == ClimaxStyle.Rounded
+            ? F($"rounded, decelerating move; volume peaked at {ex.ClimaxVolumeRatio:F1}x median and faded to {ex.VolumeFadeRatio:P0} of that peak into the turn (bowl fit R2 {ex.RoundnessR2:F2}). ")
+            : F($"daily swings eased from {ex.PeakIntensity:P1} to {ex.EndIntensity:P1}, climax volume {ex.ClimaxVolumeRatio:F1}x median. ");
+
     private static string BuildAccumulationDetails(PriceSeries s, Candidate c)
     {
         var sb = new StringBuilder();
         var ex = c.Exhaustion;
 
         sb.Append("[Accumulation] ");
-        sb.Append(F($"Selling exhaustion: fell {ex.DeclinePct:P1} from {s.High[ex.HighIndex]:F2} ({s.Dates[ex.HighIndex]:yyyy-MM-dd}) "));
-        sb.Append(F($"to a low of {s.Low[ex.LowIndex]:F2} ({s.Dates[ex.LowIndex]:yyyy-MM-dd}); daily swings eased from "));
-        sb.Append(F($"{ex.PeakIntensity:P1} to {ex.EndIntensity:P1}, climax volume {ex.ClimaxVolumeRatio:F1}x median. "));
+        sb.Append(F($"Selling exhaustion ({(ex.Style == ClimaxStyle.Rounded ? "rounded" : "sharp")}): fell {ex.DeclinePct:P1} from {s.High[ex.HighIndex]:F2} ({s.Dates[ex.HighIndex]:yyyy-MM-dd}) "));
+        sb.Append(F($"to a low of {s.Low[ex.LowIndex]:F2} ({s.Dates[ex.LowIndex]:yyyy-MM-dd}); "));
+        sb.Append(ClimaxBehaviour(ex));
 
         if (c.Rally != null)
-            sb.Append(F($"Automatic rally: +{c.Rally.RallyPct:P1} to {c.Rally.High:F2} ({s.Dates[c.Rally.Index]:yyyy-MM-dd}) on {c.Rally.VolumeRatio:F2}x median volume. "));
+        {
+            string label = c.Rally.Gradual ? "Gradual recovery" : "Automatic rally";
+            sb.Append(F($"{label}: +{c.Rally.RallyPct:P1} to {c.Rally.High:F2} ({s.Dates[c.Rally.Index]:yyyy-MM-dd}) on {c.Rally.VolumeRatio:F2}x median volume. "));
+        }
 
         if (c.Zones.Count > 0)
         {
@@ -210,15 +223,16 @@ public sealed class WyckoffAnalyzer
         double advance = climaxHigh / startPrice - 1.0;
 
         sb.Append("[Distribution] ");
-        sb.Append(F($"Buying climax: rose {advance:P1} from {startPrice:F2} ({s.Dates[startIdx]:yyyy-MM-dd}) "));
-        sb.Append(F($"to a high of {climaxHigh:F2} ({s.Dates[climaxIdx]:yyyy-MM-dd}); daily swings eased from "));
-        sb.Append(F($"{ex.PeakIntensity:P1} to {ex.EndIntensity:P1}, climax volume {ex.ClimaxVolumeRatio:F1}x median. "));
+        sb.Append(F($"Buying climax ({(ex.Style == ClimaxStyle.Rounded ? "rounded" : "sharp")}): rose {advance:P1} from {startPrice:F2} ({s.Dates[startIdx]:yyyy-MM-dd}) "));
+        sb.Append(F($"to a high of {climaxHigh:F2} ({s.Dates[climaxIdx]:yyyy-MM-dd}); "));
+        sb.Append(ClimaxBehaviour(ex));
 
         if (c.Rally != null)
         {
             double reactionLow = s.Low[c.Rally.Index];
             double reactionPct = (climaxHigh - reactionLow) / climaxHigh;
-            sb.Append(F($"Automatic reaction: -{reactionPct:P1} to {reactionLow:F2} ({s.Dates[c.Rally.Index]:yyyy-MM-dd}) on {c.Rally.VolumeRatio:F2}x median volume. "));
+            string label = c.Rally.Gradual ? "Gradual reaction" : "Automatic reaction";
+            sb.Append(F($"{label}: -{reactionPct:P1} to {reactionLow:F2} ({s.Dates[c.Rally.Index]:yyyy-MM-dd}) on {c.Rally.VolumeRatio:F2}x median volume. "));
         }
 
         if (c.Zones.Count > 0)
