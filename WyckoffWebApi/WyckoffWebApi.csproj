@@ -15,4 +15,10 @@
       <ProjectReference Include="..\WyckoffScanner\WyckoffScanner.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Content Include="..\WyckoffScanner\appsettings.json">
+        <Link>appsettings.json</Link>
+      </Content>
+    </ItemGroup>
+
 </Project>

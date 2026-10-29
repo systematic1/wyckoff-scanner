@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Hosting;
-
-namespace WyckoffScanner;
+namespace WyckoffWebApi;
 
 public class KeepAliveService : BackgroundService
 {
@@ -11,8 +9,10 @@ public class KeepAliveService : BackgroundService
     public KeepAliveService(IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
-        _pingUrl = configuration.GetValue<string>("PingUrl") ?? "?";
-        _intervalMsecs = configuration.GetValue<int>("IntervalMinutes") * 60000;
+        
+        var webApiConfig = configuration.GetSection("WebApi");
+        _pingUrl = webApiConfig.GetValue<string>("PingUrl") ?? "?";
+        _intervalMsecs = webApiConfig.GetValue<int>("IntervalMinutes") * 60000;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -22,9 +22,9 @@ public class KeepAliveService : BackgroundService
             try
             {
                 HttpClient client = _httpClientFactory.CreateClient();
-                await client.GetAsync(_pingUrl);
+                await client.GetAsync(_pingUrl, stoppingToken);
                 
-                Console.WriteLine("Pinged successfully.");
+                Console.WriteLine("Ping successful.");
             }
             catch (Exception e)
             {
