@@ -46,7 +46,7 @@ public sealed class DailyPipelineWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        _log.LogInformation("Wyckoff scanner started. Start time {Start} ({Zone}).", _calendar.StartTime, _calendar.TimeZone.Id);
+        _log.LogInformation("######  Wyckoff scanner started. Start time {Start} ({Zone}).", _calendar.StartTime, _calendar.TimeZone.Id);
 
         while (!ct.IsCancellationRequested)
         {
@@ -89,12 +89,12 @@ public sealed class DailyPipelineWorker : BackgroundService
             }
         }
 
-        _log.LogInformation("Wyckoff scanner stopped.");
+        _log.LogInformation("##### Wyckoff scanner stopped.");
     }
 
     private async Task RunPipelineAsync(DateOnly today, JobRun job, CancellationToken ct)
     {
-        _log.LogInformation("PIPELINE:  === Pipeline for {Date:yyyy-MM-dd} ===", today);
+        _log.LogInformation("=== Pipeline for {Date:yyyy-MM-dd} ===", today);
 
         bool needLoader = job.LoaderCompletedAt == null;
         bool needAnalysis = job.AnalysisCompletedAt == null;
@@ -118,7 +118,7 @@ public sealed class DailyPipelineWorker : BackgroundService
         await _email.SendDailyReportAsync(today, ct);
         await _jobs.MarkStageCompleteAsync(today, JobStage.Email, ct);
 
-        _log.LogInformation("PIPELINE:  === Pipeline for {Date:yyyy-MM-dd} complete; going dormant. ===", today);
+        _log.LogInformation("=== Pipeline for {Date:yyyy-MM-dd} complete; going dormant. ===", today);
     }
 
     /// <summary>
@@ -169,7 +169,7 @@ public sealed class DailyPipelineWorker : BackgroundService
     private async Task SleepUntilNextRunAsync(CancellationToken ct)
     {
         var target = _calendar.NextRunTimeLocal(_calendar.NowLocal());
-        _log.LogInformation("Dormant until {Next:yyyy-MM-dd HH:mm} ({Zone}).", target, _calendar.TimeZone.Id);
+        _log.LogInformation("----->  Dormant until {Next:yyyy-MM-dd HH:mm} ({Zone}).", target, _calendar.TimeZone.Id);
 
         while (!ct.IsCancellationRequested)
         {
