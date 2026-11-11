@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -28,15 +29,25 @@ public sealed class WyckoffAnalyzer
     private readonly PatternEngine _accumulation;
     private readonly PatternEngine _distribution;
 
-    public WyckoffAnalyzer(IOptions<AnalyzerOptions> options) 
+    public WyckoffAnalyzer(IOptions<AnalyzerOptions> options)
     {
-        _o = options.Value;
+        ArgumentNullException.ThrowIfNull(options);
+
+        var configured = options.Value ?? throw new ArgumentException(
+            "Analyzer options must be configured.", nameof(options));
+        _o = configured.Clone();
+        _o.Validate();
+
+        // PatternEngine is stateless; the two instances safely share immutable-in-practice
+        // configuration after construction and can be used concurrently by Analyze calls.
         _accumulation = new PatternEngine(_o);
         _distribution = new PatternEngine(_o.ForDistribution());
     }
 
     public AnalysisResult Analyze(string ticker, IReadOnlyList<DailyQuote> quotes)
     {
+        ArgumentNullException.ThrowIfNull(quotes);
+
         var result = new AnalysisResult
         {
             Ticker = ticker, 
@@ -59,6 +70,10 @@ public sealed class WyckoffAnalyzer
             return result;
         }
 
+        // Pivot-based climax candidates are confirmed only after PivotWindow bars to the
+        // right (or RoundedPivotWindow for rounded lows). This is deliberate for historical
+        // confirmation, but callers should not interpret the pivot date as a real-time signal
+        // available on that same date.
         Candidate? acc = _accumulation.FindBest(s);
 
         Candidate? dist = null;

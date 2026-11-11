@@ -1,8 +1,9 @@
 namespace WyckoffScanner.Lib.Analysis;
 
 /// <summary>
-/// Every threshold used by the Wyckoff heuristics. All are overridable in appsettings.json ("Analyzer" section).
-/// Percentages are fractions (0.15 = 15%). "Median" baselines are medians over the analysed window.
+/// Central configuration for the Wyckoff heuristics. Percentages are fractions
+/// (0.15 means 15%). Validate() is called by WyckoffAnalyzer so invalid settings
+/// fail at startup/use rather than producing opaque false positives.
 /// </summary>
 public sealed class AnalyzerOptions
 {
@@ -10,125 +11,172 @@ public sealed class AnalyzerOptions
 
     public int LookbackMonths { get; set; } = 12;
     public int MinBars { get; set; } = 60;
-
-    /// <summary>Bars on each side that must be higher for a bar to count as a swing low (SC candidate).</summary>
     public int PivotWindow { get; set; } = 5;
-
-    /// <summary>Maximum number of symbols analysed in parallel while the loader is still running.</summary>
     public int MaxConcurrency { get; set; } = 4;
 
-    // ---- Distribution (reverse polarity) -----------------------------------------------------------
-    /// <summary>Also look for distribution: buying climax -> automatic reaction -> distribution box -> upthrust -> sign of weakness.</summary>
+    // Distribution is detected by running the accumulation engine on reciprocal prices.
     public bool DetectDistribution { get; set; } = true;
-    /// <summary>Buying climax: minimum run-up, measured as (climax high / start low - 1). Mirror of <see cref="MinDeclinePct"/>.</summary>
     public double MinAdvancePct { get; set; } = 0.15;
-    /// <summary>Automatic reaction: minimum drop from the climax high, as a fraction of that high. Mirror of <see cref="MinRallyPct"/>.</summary>
     public double MinReactionPct { get; set; } = 0.06;
 
-    // ---- 1. Selling exhaustion (selling climax) - SHARP variant ---------------------------------
+    // Sharp selling/buying climax.
     public int MaxDeclineLookbackBars { get; set; } = 60;
     public int MinDeclineBars { get; set; } = 5;
-    /// <summary>Minimum peak-to-low decline of the selling leg.</summary>
     public double MinDeclinePct { get; set; } = 0.15;
-    /// <summary>Bars used to smooth the daily true-range% ("selling intensity").</summary>
     public int SmoothingBars { get; set; } = 3;
-    /// <summary>Peak intensity must be at least this multiple of the median daily range ("large selling").</summary>
     public double LargeSellingMultiple { get; set; } = 1.5;
-    /// <summary>Bars between the intensity peak and the low (the "gradually decreasing" tail).</summary>
     public int MinTailBars { get; set; } = 3;
-    /// <summary>Intensity at the low must be at most this fraction of the peak intensity.</summary>
     public double MaxExhaustionDecayRatio { get; set; } = 0.70;
-    /// <summary>Volume around the intensity peak must be this multiple of median volume (0 disables).</summary>
     public double ClimaxVolumeMultiple { get; set; } = 1.3;
 
-    // ---- 1b. Selling exhaustion - ROUNDED variant (gradual volume fade, saucer-shaped bottom) -----
-    /// <summary>
-    /// Also look for rounded climaxes: volume peaks mid-decline then fades steadily into the low, the decline decelerates,
-    /// and price curves into a bowl instead of bouncing sharply. Runs in addition to the sharp detector; the better
-    /// (more advanced) candidate wins. Distribution gets the same treatment on the inverted series (rounded top).
-    /// </summary>
+    // Rounded climax: gradual volume fade and curved price recovery.
     public bool DetectRoundedClimax { get; set; } = true;
-    /// <summary>Bars on each side that must be higher for a rounded low (wider than <see cref="PivotWindow"/> because bowls are broad).</summary>
     public int RoundedPivotWindow { get; set; } = 8;
-    /// <summary>A rounded decline needs more bars than a sharp one.</summary>
     public int RoundedMinDeclineBars { get; set; } = 15;
-    /// <summary>Bars used to smooth volume when tracking the fade.</summary>
     public int VolumeSmoothingBars { get; set; } = 5;
-    /// <summary>Bars between the smoothed-volume peak and the low (the fading tail).</summary>
     public int RoundedMinTailBars { get; set; } = 8;
-    /// <summary>Smoothed volume at its peak must be this multiple of median volume.</summary>
     public double RoundedClimaxVolumeMultiple { get; set; } = 1.2;
-    /// <summary>Average volume of the last bars into the low must be at most this fraction of the peak smoothed volume.</summary>
     public double RoundedMaxVolumeFadeRatio { get; set; } = 0.65;
-    /// <summary>
-    /// Deceleration: the price slope over the last third of the decline must be at most this fraction of the slope over
-    /// the first third (0.6 = the fall must have slowed by at least 40%).
-    /// </summary>
     public double RoundedMaxDecelRatio { get; set; } = 0.60;
-    /// <summary>Bars after the low included when fitting the bowl (and the minimum that must exist to confirm the shape).</summary>
     public int RoundedRecoveryBars { get; set; } = 25;
     public int RoundedMinRecoveryBars { get; set; } = 8;
-    /// <summary>Minimum R-squared of the parabola fitted through the closes from the decline high to the recovery.</summary>
     public double RoundedMinRSquared { get; set; } = 0.60;
-    /// <summary>The parabola's turning point must lie within this many bars of the low.</summary>
     public int RoundedVertexToleranceBars { get; set; } = 6;
-    /// <summary>How far past the low to search for the top of the gradual recovery.</summary>
     public int RoundedMaxRecoveryBars { get; set; } = 40;
-    /// <summary>Gradual recovery: minimum rise from the low. (For distribution: minimum drop from the high; converted automatically.)</summary>
     public double RoundedMinRecoveryPct { get; set; } = 0.05;
 
-    // ---- 2. Automatic rally ---------------------------------------------------------------------
+    // Automatic rally/reaction.
     public int AutoRallyMaxBars { get; set; } = 20;
     public double MinRallyPct { get; set; } = 0.06;
-    /// <summary>Rally must recover at least this fraction of the preceding decline.</summary>
     public double MinRetraceOfDecline { get; set; } = 0.20;
-    /// <summary>"Moderate volume": average rally volume vs median volume must fall inside this band...</summary>
     public double RallyVolumeMinRatio { get; set; } = 0.5;
     public double RallyVolumeMaxRatio { get; set; } = 1.5;
-    // ...and also be lower than the climax volume.
 
-    // ---- 3. Accumulation (consolidation on low volume) --------------------------------------------
+    // Accumulation/distribution trading range.
     public int MinAccumulationBars { get; set; } = 10;
-    /// <summary>(highest high - lowest low) / lowest low of the box.</summary>
     public double MaxAccumulationRangePct { get; set; } = 0.12;
-    /// <summary>Average volume in the box / median volume must be at or below this.</summary>
     public double AccumulationVolumeRatio { get; set; } = 0.90;
-    /// <summary>A close this far below the selling-climax low invalidates the structure.</summary>
     public double StructureBreakdownPct { get; set; } = 0.08;
-    /// <summary>For "Likely progressing" the latest accumulation box must have ended within this many bars.</summary>
     public int AccumulationMaxAgeBars { get; set; } = 20;
 
-    // ---- 4. Spring --------------------------------------------------------------------------------
+    // Spring/upthrust.
     public int SpringRangeLookbackBars { get; set; } = 40;
     public double SpringMaxRangePct { get; set; } = 0.15;
     public double TouchTolerancePct { get; set; } = 0.015;
     public int MinSupportTouches { get; set; } = 2;
     public int MinResistanceTouches { get; set; } = 2;
-    /// <summary>Spring bar must trade at least this far below support...</summary>
     public double MinSpringPiercePct { get; set; } = 0.003;
-    /// <summary>...but not further than this (deeper = breakdown, not spring).</summary>
     public double MaxSpringPiercePct { get; set; } = 0.06;
-    /// <summary>Price must close back above support within this many bars after the spring bar.</summary>
     public int SpringRecoveryBars { get; set; } = 3;
     public int SpringMaxAgeBars { get; set; } = 30;
 
-    // ---- 5. Sign of strength ----------------------------------------------------------------------
+    // Sign of strength/weakness.
     public double BreakoutMarginPct { get; set; } = 0.005;
-    /// <summary>Breakout-bar volume vs the prior 20-bar average.</summary>
     public double SosVolumeMultiple { get; set; } = 1.3;
     public int SosMaxAgeBars { get; set; } = 10;
-    /// <summary>Latest close must still be at least resistance * (1 - tolerance).</summary>
     public double SosHoldTolerancePct { get; set; } = 0.02;
 
     /// <summary>
-    /// Options for the distribution pass. Distribution is detected by running the same detectors on a price-inverted
-    /// series (price' = 1/price: highs become lows, up-bars become down-bars, volume is unchanged). Percentage
-    /// thresholds that are measured against a different base in the inverted series are converted here so that the
-    /// user-facing numbers keep their natural meaning (e.g. a 15% run-up, a 6% reaction, a 0.3% upthrust).
+    /// Validate settings that could otherwise cause invalid indexing, divide-by-zero,
+    /// or nonsensical thresholds. This intentionally does not attempt to tune strategy
+    /// values; it only enforces safe numeric domains.
+    /// </summary>
+    public void Validate()
+    {
+        Positive(LookbackMonths, nameof(LookbackMonths));
+        Positive(MinBars, nameof(MinBars));
+        Positive(PivotWindow, nameof(PivotWindow));
+        Positive(MaxConcurrency, nameof(MaxConcurrency));
+        Positive(MaxDeclineLookbackBars, nameof(MaxDeclineLookbackBars));
+        Positive(MinDeclineBars, nameof(MinDeclineBars));
+        Positive(SmoothingBars, nameof(SmoothingBars));
+        Positive(MinTailBars, nameof(MinTailBars));
+        Positive(RoundedPivotWindow, nameof(RoundedPivotWindow));
+        Positive(RoundedMinDeclineBars, nameof(RoundedMinDeclineBars));
+        Positive(VolumeSmoothingBars, nameof(VolumeSmoothingBars));
+        Positive(RoundedMinTailBars, nameof(RoundedMinTailBars));
+        Positive(RoundedRecoveryBars, nameof(RoundedRecoveryBars));
+        Positive(RoundedMinRecoveryBars, nameof(RoundedMinRecoveryBars));
+        Positive(RoundedVertexToleranceBars, nameof(RoundedVertexToleranceBars));
+        Positive(RoundedMaxRecoveryBars, nameof(RoundedMaxRecoveryBars));
+        Positive(AutoRallyMaxBars, nameof(AutoRallyMaxBars));
+        Positive(MinAccumulationBars, nameof(MinAccumulationBars));
+        Positive(AccumulationMaxAgeBars, nameof(AccumulationMaxAgeBars));
+        Positive(SpringRangeLookbackBars, nameof(SpringRangeLookbackBars));
+        Positive(MinSupportTouches, nameof(MinSupportTouches));
+        Positive(MinResistanceTouches, nameof(MinResistanceTouches));
+        Positive(SpringRecoveryBars, nameof(SpringRecoveryBars));
+        Positive(SpringMaxAgeBars, nameof(SpringMaxAgeBars));
+        Positive(SosMaxAgeBars, nameof(SosMaxAgeBars));
+
+        Positive(MinAdvancePct, nameof(MinAdvancePct));
+        Fraction(MinReactionPct, nameof(MinReactionPct));
+        Fraction(MinDeclinePct, nameof(MinDeclinePct));
+        Fraction(MaxExhaustionDecayRatio, nameof(MaxExhaustionDecayRatio));
+        Fraction(RoundedMaxVolumeFadeRatio, nameof(RoundedMaxVolumeFadeRatio));
+        Fraction(RoundedMaxDecelRatio, nameof(RoundedMaxDecelRatio));
+        Fraction(RoundedMinRSquared, nameof(RoundedMinRSquared));
+        Fraction(RoundedMinRecoveryPct, nameof(RoundedMinRecoveryPct));
+        Fraction(MinRallyPct, nameof(MinRallyPct));
+        Fraction(MinRetraceOfDecline, nameof(MinRetraceOfDecline));
+        Fraction(MaxAccumulationRangePct, nameof(MaxAccumulationRangePct));
+        Positive(AccumulationVolumeRatio, nameof(AccumulationVolumeRatio));
+        Fraction(StructureBreakdownPct, nameof(StructureBreakdownPct));
+        Fraction(SpringMaxRangePct, nameof(SpringMaxRangePct));
+        Fraction(TouchTolerancePct, nameof(TouchTolerancePct));
+        Fraction(MinSpringPiercePct, nameof(MinSpringPiercePct));
+        Fraction(MaxSpringPiercePct, nameof(MaxSpringPiercePct));
+        Fraction(BreakoutMarginPct, nameof(BreakoutMarginPct));
+        Fraction(SosHoldTolerancePct, nameof(SosHoldTolerancePct));
+
+        Positive(RallyVolumeMinRatio, nameof(RallyVolumeMinRatio));
+        Positive(RallyVolumeMaxRatio, nameof(RallyVolumeMaxRatio));
+        Positive(SosVolumeMultiple, nameof(SosVolumeMultiple));
+        Positive(LargeSellingMultiple, nameof(LargeSellingMultiple));
+        Positive(RoundedClimaxVolumeMultiple, nameof(RoundedClimaxVolumeMultiple));
+        Positive(RoundedMinRSquared, nameof(RoundedMinRSquared));
+        if (ClimaxVolumeMultiple < 0 || !double.IsFinite(ClimaxVolumeMultiple))
+            throw new ArgumentOutOfRangeException(nameof(ClimaxVolumeMultiple));
+        if (RallyVolumeMaxRatio < RallyVolumeMinRatio)
+            throw new ArgumentException("RallyVolumeMaxRatio must be >= RallyVolumeMinRatio.");
+        if (MaxSpringPiercePct <= MinSpringPiercePct)
+            throw new ArgumentException("MaxSpringPiercePct must be greater than MinSpringPiercePct.");
+        if (RoundedMinRecoveryBars > RoundedMaxRecoveryBars)
+            throw new ArgumentException("RoundedMinRecoveryBars must be <= RoundedMaxRecoveryBars.");
+    }
+
+    private static void Positive(int value, string name)
+    {
+        if (value <= 0)
+            throw new ArgumentOutOfRangeException(name, "Value must be greater than zero.");
+    }
+
+    private static void Positive(double value, string name)
+    {
+        if (!double.IsFinite(value) || value <= 0)
+            throw new ArgumentOutOfRangeException(name, "Value must be finite and greater than zero.");
+    }
+
+    private static void Fraction(double value, string name)
+    {
+        if (!double.IsFinite(value) || value < 0 || value >= 1)
+            throw new ArgumentOutOfRangeException(name, "Fraction must be finite and in [0, 1).");
+    }
+
+    /// <summary>
+    /// Create a private configuration snapshot so callers changing their bound options
+    /// after analyzer construction cannot change an in-flight analysis.
+    /// </summary>
+    public AnalyzerOptions Clone() => (AnalyzerOptions)MemberwiseClone();
+
+    /// <summary>
+    /// Reciprocal-price transformation used for distribution. The conversions preserve
+    /// the natural percentage interpretation of the original (non-inverted) market.
     /// </summary>
     public AnalyzerOptions ForDistribution()
     {
-        var m = (AnalyzerOptions)MemberwiseClone();
+        Validate();
+        var m = Clone();
         m.MinDeclinePct = MinAdvancePct / (1 + MinAdvancePct);
         m.MinRallyPct = MinReactionPct / (1 - MinReactionPct);
         m.RoundedMinRecoveryPct = RoundedMinRecoveryPct / (1 - RoundedMinRecoveryPct);

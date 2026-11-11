@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+using System;
 using WyckoffScanner.Lib.Models;
 
 namespace WyckoffScanner.Lib.Analysis;
@@ -83,7 +83,7 @@ internal sealed class PatternEngine
         var ex = style == ClimaxStyle.Sharp
             ? DetectSellingExhaustion(s, lowIdx)
             : DetectRoundedExhaustion(s, lowIdx);
-        if (ex == null) 
+        if (ex == null)
             return null;
 
         var cand = new Candidate { Exhaustion = ex };
@@ -91,10 +91,12 @@ internal sealed class PatternEngine
         var ar = style == ClimaxStyle.Sharp
             ? DetectAutomaticRally(s, ex)
             : DetectGradualRecovery(s, ex);
-        if (ar == null) 
+        if (ar == null)
             return cand;
 
-        // Structure is dead if price closes decisively below the selling-climax low after the rally.
+        // Invalidation is checked through the latest bar, not just through the date on which
+        // the rally was identified. This prevents a later decisive breakdown from leaving an
+        // old accumulation candidate active.
         double floor = s.Low[lowIdx] * (1 - _o.StructureBreakdownPct);
         for (int i = ar.Index + 1; i < s.Count; i++)
         {
@@ -104,16 +106,22 @@ internal sealed class PatternEngine
 
         cand.Rally = ar;
         cand.Zones = DetectAccumulation(s, ex, ar);
-        if (cand.Zones.Count == 0) 
+        if (cand.Zones.Count == 0)
             return cand;
 
-        // Evaluate every spring; keep the one that yields the most advanced flag (later wins ties).
+        // Evaluate springs only after an accepted accumulation zone. Keep the most recent
+        // equally-ranked spring so the returned event represents the latest structure.
         WyckoffFlag bestFlag = WyckoffFlag.None;
-        foreach (var spring in DetectSprings(s, ar, cand.Zones))
+        foreach (var spring in DetectSprings(s, cand.Zones))
         {
             var sos = DetectSignOfStrength(s, spring);
             var flag = ClassifySpring(s, spring, sos);
-            if (flag >= bestFlag)
+            // Only expose a sign-of-strength event when it is still a valid current signal.
+            // A failed/aged breakout must not hide an otherwise valid recent spring.
+            if (flag != WyckoffFlag.SosDetected)
+                sos = null;
+
+            if (flag > bestFlag || (flag == bestFlag && spring.Index >= (cand.Spring?.Index ?? -1)))
             {
                 bestFlag = flag;
                 cand.Spring = spring;
@@ -122,7 +130,13 @@ internal sealed class PatternEngine
         }
 
         int last = s.Count - 1;
-        if (bestFlag == WyckoffFlag.None && cand.Zones[^1].End >= last - _o.AccumulationMaxAgeBars)
+        // A recent box is only "progressing" when price is still inside/near that box.
+        // A fresh box followed by a large move away should not be labelled as active accumulation.
+        var latestZone = cand.Zones[^1];
+        bool recentBox = latestZone.End >= last - _o.AccumulationMaxAgeBars;
+        bool priceNearBox = s.Close[last] >= latestZone.Low * (1 - _o.StructureBreakdownPct) &&
+                            s.Close[last] <= latestZone.High * (1 + _o.MaxAccumulationRangePct);
+        if (bestFlag == WyckoffFlag.None && recentBox && priceNearBox)
             bestFlag = WyckoffFlag.LikelyProgressing;
 
         cand.Flag = bestFlag;
@@ -137,16 +151,18 @@ internal sealed class PatternEngine
         {
             bool recent = last - sos.Index <= _o.SosMaxAgeBars;
             bool holding = s.Close[last] >= sos.Resistance * (1 - _o.SosHoldTolerancePct);
-            return recent && holding ? 
-                WyckoffFlag.SosDetected : 
-                WyckoffFlag.None;
+            if (recent && holding)
+                return WyckoffFlag.SosDetected;
+            // If the breakout is no longer valid, fall back to the spring's own status.
         }
 
         bool springRecent = last - spring.Index <= _o.SpringMaxAgeBars;
-        bool notBroken = s.Close[last] >= spring.Support * (1 - _o.MaxSpringPiercePct);
-        return springRecent && notBroken ? 
-            WyckoffFlag.SpringDetected : 
-            WyckoffFlag.None;
+
+        // Use the structure-breakdown threshold here. MaxSpringPiercePct describes the
+        // depth of the spring wick, not how far price may subsequently fall and remain valid.
+        double invalidationFloor = spring.Support * (1 - _o.StructureBreakdownPct);
+        bool notBroken = s.Close[last] >= invalidationFloor;
+        return springRecent && notBroken ? WyckoffFlag.SpringDetected : WyckoffFlag.None;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -311,17 +327,25 @@ internal sealed class PatternEngine
         if (end - low < 3) 
             return null;
 
-        int a = low + 1;
-        for (int i = low + 1; i <= end; i++)
+        // Use the first confirmed local swing high rather than the highest high anywhere
+        // in the full window. The latter can accidentally absorb a later markup leg and
+        // mislabel it as the automatic rally.
+        int a = -1;
+        for (int i = low + 2; i <= end - 2; i++)
         {
-            if (s.High[i] >= s.High[a])
+            bool localHigh = s.High[i] >= s.High[i - 1] &&
+                             s.High[i] >= s.High[i - 2] &&
+                             s.High[i] > s.High[i + 1] &&
+                             s.High[i] > s.High[i + 2];
+            if (localHigh)
+            {
                 a = i;
+                break;
+            }
         }
 
-        if (a >= end) 
-            return null;      // still rising at the edge of the window: rally has not topped yet
-        if (a - low < 2) 
-            return null;
+        if (a < 0)
+            return null; // no confirmed rally top inside the confirmation window
 
         double rise = s.High[a] - s.Low[low];
         double rallyPct = rise / s.Low[low];
@@ -391,6 +415,7 @@ internal sealed class PatternEngine
     {
         var zones = new List<AccumulationZone>();
         double floor = s.Low[ex.LowIndex] * (1 - _o.StructureBreakdownPct);
+        // Keep the original cap but avoid accepting an invalid/non-positive range denominator.
         double cap = ar.High * 1.05;
         int n = s.Count;
         int i = ar.Index + 1;
@@ -400,20 +425,30 @@ internal sealed class PatternEngine
             double hi = double.MinValue, lo = double.MaxValue;
             int e = i - 1;
 
+            // Extend a candidate box until its range or structural boundaries are breached.
             while (e + 1 < n)
             {
-                double nh = Math.Max(hi, s.High[e + 1]);
-                double nl = Math.Min(lo, s.Low[e + 1]);
-                if ((nh - nl) / nl > _o.MaxAccumulationRangePct || nl < floor || nh > cap) 
+                double nextHigh = s.High[e + 1];
+                double nextLow = s.Low[e + 1];
+                if (!double.IsFinite(nextHigh) || !double.IsFinite(nextLow) || nextLow <= 0)
                     break;
-                hi = nh; 
-                lo = nl; 
+
+                double nh = Math.Max(hi, nextHigh);
+                double nl = Math.Min(lo, nextLow);
+                if (nl <= 0 || (nh - nl) / nl > _o.MaxAccumulationRangePct ||
+                    nl < floor || nh > cap)
+                    break;
+
+                hi = nh;
+                lo = nl;
                 e++;
             }
 
-            if (e - i + 1 >= _o.MinAccumulationBars)
+            int length = e - i + 1;
+            if (length >= _o.MinAccumulationBars)
             {
-                double ratio = PriceSeries.Mean(s.Volume, i, e) / s.MedianVolume;
+                double meanVolume = PriceSeries.Mean(s.Volume, i, e);
+                double ratio = s.MedianVolume > 0 ? meanVolume / s.MedianVolume : double.PositiveInfinity;
                 if (ratio <= _o.AccumulationVolumeRatio)
                 {
                     zones.Add(new AccumulationZone(i, e, lo, hi, ratio));
@@ -421,6 +456,7 @@ internal sealed class PatternEngine
                     continue;
                 }
             }
+
             i++;
         }
 
@@ -431,58 +467,76 @@ internal sealed class PatternEngine
     // 4. Spring: after bouncing between support and resistance, a brief dip below support that quickly recovers.
     // ------------------------------------------------------------------------------------------------
 
-    private List<SpringInfo> DetectSprings(PriceSeries s, AutomaticRally ar, List<AccumulationZone> zones)
+    private List<SpringInfo> DetectSprings(PriceSeries s, List<AccumulationZone> zones)
     {
         var springs = new List<SpringInfo>();
-        int first = Math.Max(zones[0].Start + _o.MinAccumulationBars, ar.Index + 1 + _o.MinAccumulationBars);
+        if (zones.Count == 0)
+            return springs;
 
-        for (int i = first; i < s.Count; i++)
+        for (int i = 0; i < zones.Count; i++)
         {
-            int ws = Math.Max(ar.Index + 1, i - _o.SpringRangeLookbackBars);
-            int we = i - 1;
-            if (we - ws + 1 < _o.MinAccumulationBars) 
-                continue;
+            var zone = zones[i];
 
-            double support = double.MaxValue, resistance = double.MinValue;
-            for (int k = ws; k <= we; k++)
+            // A spring must occur after a completed, volume-qualified range. The old
+            // implementation could derive support from any post-rally bars, even when no
+            // accepted accumulation box existed at the spring date.
+            int first = Math.Max(zone.End + 1, zone.Start + _o.MinAccumulationBars);
+            // Continue evaluating through the end of the series. A spring can occur
+            // after a later re-accumulation box, not only in the gap before the next box.
+            int lastSpring = s.Count - 1;
+
+            for (int bar = first; bar <= lastSpring; bar++)
             {
-                support = Math.Min(support, s.Low[k]);
-                resistance = Math.Max(resistance, s.High[k]);
-            }
+                int ws = Math.Max(zone.Start, bar - _o.SpringRangeLookbackBars);
+                int we = bar - 1;
+                if (we - ws + 1 < _o.MinAccumulationBars)
+                    continue;
 
-            if ((resistance - support) / support > _o.SpringMaxRangePct) 
-                continue;   // not a tight range
-
-            int supportTouches = 0, resistanceTouches = 0;
-            for (int k = ws; k <= we; k++)
-            {
-                if (s.Low[k] <= support * (1 + _o.TouchTolerancePct)) 
-                    supportTouches++;
-                if (s.High[k] >= resistance * (1 - _o.TouchTolerancePct)) 
-                    resistanceTouches++;
-            }
-            if (supportTouches < _o.MinSupportTouches || resistanceTouches < _o.MinResistanceTouches) 
-                continue;
-
-            if (s.Low[i] >= support * (1 - _o.MinSpringPiercePct)) 
-                continue;          // did not undercut support
-            if (s.Low[i] < support * (1 - _o.MaxSpringPiercePct)) 
-                continue;           // too deep: a breakdown
-
-            int recovery = -1;
-            int lastCheck = Math.Min(s.Count - 1, i + _o.SpringRecoveryBars);
-            for (int k = i; k <= lastCheck; k++)
-            {
-                if (s.Close[k] > support)
+                double support = double.MaxValue, resistance = double.MinValue;
+                for (int k = ws; k <= we; k++)
                 {
-                    recovery = k; 
-                    break;
+                    support = Math.Min(support, s.Low[k]);
+                    resistance = Math.Max(resistance, s.High[k]);
                 }
-            }
-            if (recovery < 0) 
-                continue;                                               // did not recover promptly
 
-            springs.Add(new SpringInfo(i, recovery, support, resistance, s.Low[i]));
+                if (support <= 0 || resistance <= support ||
+                    (resistance - support) / support > _o.SpringMaxRangePct)
+                    continue;
+
+                int supportTouches = 0, resistanceTouches = 0;
+                for (int k = ws; k <= we; k++)
+                {
+                    if (s.Low[k] <= support * (1 + _o.TouchTolerancePct))
+                        supportTouches++;
+                    if (s.High[k] >= resistance * (1 - _o.TouchTolerancePct))
+                        resistanceTouches++;
+                }
+                if (supportTouches < _o.MinSupportTouches ||
+                    resistanceTouches < _o.MinResistanceTouches)
+                    continue;
+
+                // Require a genuine undercut, but reject a deep penetration that is more
+                // consistent with a breakdown than a spring/upthrust.
+                if (s.Low[bar] >= support * (1 - _o.MinSpringPiercePct))
+                    continue;
+                if (s.Low[bar] < support * (1 - _o.MaxSpringPiercePct))
+                    continue;
+
+                int recovery = -1;
+                int lastCheck = Math.Min(s.Count - 1, bar + _o.SpringRecoveryBars);
+                for (int k = bar; k <= lastCheck; k++)
+                {
+                    if (s.Close[k] > support)
+                    {
+                        recovery = k;
+                        break;
+                    }
+                }
+                if (recovery < 0)
+                    continue;
+
+                springs.Add(new SpringInfo(bar, recovery, support, resistance, s.Low[bar]));
+            }
         }
 
         return springs;
@@ -494,34 +548,49 @@ internal sealed class PatternEngine
 
     private SosInfo? DetectSignOfStrength(PriceSeries s, SpringInfo spring)
     {
+        SosInfo? latest = null;
+
         for (int j = spring.RecoveryIndex + 1; j < s.Count; j++)
         {
-            if (s.Close[j] <= spring.Resistance * (1 + _o.BreakoutMarginPct)) 
+            double barRange = s.High[j] - s.Low[j];
+            if (barRange <= 0)
                 continue;
-            if (s.Close[j] <= s.Open[j]) 
+
+            if (s.Close[j] <= spring.Resistance * (1 + _o.BreakoutMarginPct))
+                continue;
+            if (s.Close[j] <= s.Open[j])
+                continue;
+
+            // A strong close near the top of the breakout bar helps reject long-upper-wick
+            // probes that technically close above resistance but show weak demand.
+            double closeLocation = (s.Close[j] - s.Low[j]) / barRange;
+            if (closeLocation < 0.65)
                 continue;
 
             int vs = Math.Max(0, j - 20);
-            if (j - vs < 5) 
+            if (j - vs < 5)
                 continue;
 
             double avgVol = PriceSeries.Mean(s.Volume, vs, j - 1);
-            if (avgVol <= 0) 
+            if (avgVol <= 0)
                 continue;
             double volRatio = s.Volume[j] / avgVol;
-            if (volRatio < _o.SosVolumeMultiple) 
+            if (volRatio < _o.SosVolumeMultiple)
                 continue;
 
             double avgRange = 0;
-            for (int k = vs; k < j; k++) 
+            for (int k = vs; k < j; k++)
                 avgRange += s.High[k] - s.Low[k];
-            
             avgRange /= (j - vs);
-            if (s.High[j] - s.Low[j] < avgRange) 
-                continue;                            // not a wide-range bar
 
-            return new SosInfo(j, spring.Resistance, volRatio);
+            if (barRange < avgRange)
+                continue;
+
+            // Keep scanning: a later breakout may be the currently valid event, while an
+            // earlier breakout may have failed and been reclaimed.
+            latest = new SosInfo(j, spring.Resistance, volRatio);
         }
-        return null;
+
+        return latest;
     }
 }
