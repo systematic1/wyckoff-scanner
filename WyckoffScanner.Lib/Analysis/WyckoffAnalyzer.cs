@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Org.BouncyCastle.Crypto.Digests;
 using WyckoffScanner.Lib.Models;
 
 namespace WyckoffScanner.Lib.Analysis;
@@ -94,6 +95,47 @@ public sealed class WyckoffAnalyzer
 
         bool isDistribution = PreferDistribution(acc, dist);
         var best = (isDistribution ? dist! : acc!);
+        
+        // Call the new probability scorer logic
+        var scoreInput = new WyckoffScoreInput
+        {
+            Direction = isDistribution ? WyckoffDirection.Distribution : WyckoffDirection.Accumulation,
+
+            ClimaxDetected = true,
+            ClimaxMovePct = best.Exhaustion.DeclinePct,
+            ClimaxVolumeMultiple = best.Exhaustion.ClimaxVolumeRatio,
+            ClimaxIntensityMultiple = best.Exhaustion.PeakIntensity / s.MedianTrPct,
+            ExhaustionFadeRatio = best.Exhaustion.EndIntensity / best.Exhaustion.PeakIntensity,
+            ClimaxAgeBars = _o.MaxDeclineLookbackBars,
+
+            RallyDetected = best.Rally != null,
+            RallyRetraceRatio = best.Rally?.RetraceOfDecline ?? 0.0,
+            RallyVolumeMultiple = best.Rally?.VolumeRatio ?? 0.0,
+            RallyAgeBars = _o.AutoRallyMaxBars,
+
+            TradingRangeDetected = best.Zones.Any(),
+            TradingRangeDurationBars = _o.MinAccumulationBars, // ??
+            TradingRangeWidthPct = _o.MaxAccumulationRangePct, // ??
+            TradingRangeVolumeMultiple = 0.72, // TO DO
+            TradingRangeAgeBars = _o.AccumulationMaxAgeBars, // ??
+            PriceWithinOrNearRange = true, // TO DO
+
+            SpringOrUpthrustDetected = best.Spring != null,
+            SpringPiercePct = _o.BreakoutMarginPct,
+            SpringRecoveryBars = _o.SpringRecoveryBars,
+            SpringAgeBars = _o.SpringMaxAgeBars,
+            SpringRecovered = true, // TO DO
+            StructureStillHolds = true, // TO DO
+
+            BreakoutDetected = best.Sos != null,
+            BreakoutVolumeMultiple = 1.9, // TO DO
+            BreakoutCloseLocation = 0.88, // TO DO
+            BreakoutAgeBars = 2, // TO DO
+            BreakoutStillHolding = true, // TO DO
+            
+            RoundedFitR2 = best.Exhaustion.RoundnessR2,
+            RoundedVolumeFadeRatio = best.Exhaustion.VolumeFadeRatio
+        };
 
         result.Pattern = (isDistribution ? WyckoffPattern.Distribution : WyckoffPattern.Accumulation);
         result.Flag = (isDistribution && best.Flag != WyckoffFlag.None ? (WyckoffFlag)((int)best.Flag + 3) : best.Flag);
@@ -103,6 +145,7 @@ public sealed class WyckoffAnalyzer
         result.AccumulationCount = best.Zones.Count;
         result.Spring = best.Spring != null;
         result.SignOfStrength = best.Sos != null;
+        result.ProbabilityScore = WyckoffProbabilityScorer.Score(scoreInput);
 
         if (!isDistribution)
         {

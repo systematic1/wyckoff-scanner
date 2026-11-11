@@ -1,3 +1,5 @@
+using WyckoffScanner.Lib.Analysis;
+
 namespace WyckoffScanner.Lib.Models;
 
 public sealed class SymbolRecord
@@ -82,6 +84,9 @@ public sealed class AnalysisResult
     public DateOnly LastDate { get; set; }
     public int BarsAnalyzed { get; set; }
     public string Details { get; set; } = "";
+    
+    // Scoring
+    public WyckoffProbabilityScore? ProbabilityScore { get; set; }
 
     public string FlagMessage => Flag switch
     {
