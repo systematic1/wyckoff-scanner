@@ -131,7 +131,11 @@ class TesterProgram
         Console.WriteLine($"Number of bars analyzed:              {result.BarsAnalyzed}");
         Console.WriteLine($"Last Date Analyzed:                   {result.LastDate}");
         Console.WriteLine($"Last Close Price:                     ${result.LastClose}");
-        Console.WriteLine();
+        
+        WriteTextColoredByCondition(
+            result.ProbabilityScore?.Score >= 50.0,
+            $"Wyckoff Probability score:            {result.ProbabilityScore?.Score ?? -1}"
+        );
 
         return result;
     }

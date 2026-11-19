@@ -95,6 +95,27 @@ public sealed class WyckoffAnalyzer
 
         bool isDistribution = PreferDistribution(acc, dist);
         var best = (isDistribution ? dist! : acc!);
+
+        double priceRangeLow = best.Zones.Count > 0 
+            ? (isDistribution
+                ? best.Zones.Min(x => 1.0 / x.High)
+                : best.Zones.Min(x => x.Low)
+            ) : 0.0;
+        double priceRangeHigh = best.Zones.Count > 0 
+            ? (isDistribution
+                ? best.Zones.Max(x => 1.0 / x.Low)
+                : best.Zones.Max(x => x.High)
+            ) : 0.0;
+        double breakoutRange = best.Sos != null
+            ? s.High[best.Sos.Index] - s.Low[best.Sos.Index]
+            : 0.0;
+        double breakoutCloseLoc = breakoutRange > 0.0
+            ? (isDistribution
+                ? (s.High[best.Sos?.Index ?? 0] - s.Close[best.Sos?.Index ?? 0]) / (breakoutRange + 0.0001)
+                : (s.Close[best.Sos?.Index ?? 0] - s.Low[best.Sos?.Index ?? 0]) / (breakoutRange + 0.0001)
+            )
+            : 0.5;
+        
         
         // Call the new probability scorer logic
         var scoreInput = new WyckoffScoreInput
@@ -105,33 +126,66 @@ public sealed class WyckoffAnalyzer
             ClimaxMovePct = best.Exhaustion.DeclinePct,
             ClimaxVolumeMultiple = best.Exhaustion.ClimaxVolumeRatio,
             ClimaxIntensityMultiple = best.Exhaustion.PeakIntensity / s.MedianTrPct,
-            ExhaustionFadeRatio = best.Exhaustion.EndIntensity / best.Exhaustion.PeakIntensity,
-            ClimaxAgeBars = _o.MaxDeclineLookbackBars,
+            ExhaustionFadeRatio = best.Exhaustion.EndIntensity / (best.Exhaustion.PeakIntensity + 0.0001),
+            ClimaxAgeBars = s.Count - 1 - best.Exhaustion.LowIndex,
 
             RallyDetected = best.Rally != null,
             RallyRetraceRatio = best.Rally?.RetraceOfDecline ?? 0.0,
             RallyVolumeMultiple = best.Rally?.VolumeRatio ?? 0.0,
-            RallyAgeBars = _o.AutoRallyMaxBars,
+            RallyAgeBars = best.Rally != null
+                ? s.Count - 1 - best.Rally?.Index ?? 0
+                : 0,
 
             TradingRangeDetected = best.Zones.Any(),
-            TradingRangeDurationBars = _o.MinAccumulationBars, // ??
-            TradingRangeWidthPct = _o.MaxAccumulationRangePct, // ??
-            TradingRangeVolumeMultiple = 0.72, // TO DO
-            TradingRangeAgeBars = _o.AccumulationMaxAgeBars, // ??
-            PriceWithinOrNearRange = true, // TO DO
+            TradingRangeDurationBars = best.Zones.Count > 0
+                ? best.Zones.Max(x => x.End) - best.Zones.Min(x => x.Start) + 1
+                : 0,
+            TradingRangeWidthPct = best.Zones.Count > 0
+                ? (best.Zones.Max(x => x.High) - best.Zones.Min(x => x.Low)) / best.Zones.Min(x => x.Low)
+                : 0,
+            TradingRangeVolumeMultiple = best.Zones.Count > 0 
+                ? best.Zones.Average(x => x.VolumeRatio)
+                : 0,
+            TradingRangeAgeBars = best.Zones.Count > 0
+                ? s.Count - 1 - best.Zones.Max(x => x.End)
+                : 0,
+            PriceWithinOrNearRange = 
+                s.Close[^1] >= priceRangeLow * (1.0 - _o.PriceRangeTolerance) &&
+                s.Close[^1] <= priceRangeHigh * (1.0 + _o.PriceRangeTolerance),
 
             SpringOrUpthrustDetected = best.Spring != null,
-            SpringPiercePct = _o.BreakoutMarginPct,
-            SpringRecoveryBars = _o.SpringRecoveryBars,
-            SpringAgeBars = _o.SpringMaxAgeBars,
-            SpringRecovered = true, // TO DO
-            StructureStillHolds = true, // TO DO
+            SpringPiercePct = best.Spring != null
+                ? Math.Max(0, (best.Spring.Support - best.Spring.SpringLow) / (best.Spring.Support + 0.0001))
+                : 0,
+            SpringRecoveryBars = best.Spring != null
+                ? best.Spring.RecoveryIndex - best.Spring.Index
+                : 0,
+            SpringAgeBars = best.Spring != null
+                ? s.Count - 1 - best.Spring.Index
+                : 0,
+            SpringRecovered = best.Spring != null && 
+                              (isDistribution 
+                              ? s.Close[best.Spring.RecoveryIndex] < 1.0 / (best.Spring.Support + 0.0001)
+                              : s.Close[best.Spring.RecoveryIndex] > best.Spring.Support),
+            StructureStillHolds = best.Spring != null &&
+                                  SpringStructureStillHolds(
+                                      s,
+                                      best.Spring,
+                                      isDistribution,
+                                      _o.SpringStructureCloseTolerancePct,
+                                      _o.SpringStructureIntradayTolerancePct),
 
             BreakoutDetected = best.Sos != null,
-            BreakoutVolumeMultiple = 1.9, // TO DO
-            BreakoutCloseLocation = 0.88, // TO DO
-            BreakoutAgeBars = 2, // TO DO
-            BreakoutStillHolding = true, // TO DO
+            BreakoutVolumeMultiple = best.Sos?.VolumeRatio ?? 0.0,
+            BreakoutCloseLocation = breakoutCloseLoc,
+            BreakoutAgeBars = best.Sos != null ? s.Count - 1 - best.Sos?.Index ?? 0 : 0,
+            BreakoutStillHolding = best.Sos != null &&
+                                   IsBreakoutStillHolding(
+                                       s,
+                                       best.Sos.Index,
+                                       best.Sos.Resistance,
+                                       isDistribution,
+                                       _o.BreakoutHoldingTolerancePct),
             
             RoundedFitR2 = best.Exhaustion.RoundnessR2,
             RoundedVolumeFadeRatio = best.Exhaustion.VolumeFadeRatio
@@ -315,4 +369,176 @@ public sealed class WyckoffAnalyzer
         sb.Append(F($"Last close {s.Close[^1]:F2} ({s.Dates[^1]:yyyy-MM-dd})."));
         return sb.ToString();
     }
+    
+    // ==============================================================================
+    
+    /// <summary>
+    /// Determines whether the structure established by a spring or upthrust
+    /// remains valid after the recovery bar.
+    ///
+    /// Accumulation:
+    ///   Invalid if a subsequent close breaks below support by more than
+    ///   the closing tolerance, or an intraday low breaks support by more
+    ///   than the intraday tolerance.
+    ///
+    /// Distribution:
+    ///   Invalid if a subsequent close breaks above resistance by more than
+    ///   the closing tolerance, or an intraday high breaks resistance by
+    ///   more than the intraday tolerance.
+    ///
+    /// The recovery bar itself is excluded because its intraday penetration
+    /// is part of the spring/upthrust event being evaluated.
+    /// </summary>
+    private static bool SpringStructureStillHolds(
+        PriceSeries s,
+        SpringInfo spring,
+        bool isDistribution,
+        double closeTolerancePct,
+        double intradayTolerancePct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(spring);
+
+        if (closeTolerancePct < 0.0 ||
+            intradayTolerancePct < 0.0 ||
+            closeTolerancePct >= 1.0 ||
+            intradayTolerancePct >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(closeTolerancePct),
+                "Structural tolerances must be between 0 and 1.");
+        }
+
+        int recoveryIndex = spring.RecoveryIndex;
+
+        // Invalid event indexes cannot establish a valid structure.
+        if (recoveryIndex < spring.Index ||
+            recoveryIndex < 0 ||
+            recoveryIndex >= s.Count)
+        {
+            return false;
+        }
+
+        // Convert the structural level to original-price coordinates.
+        // Accumulation: spring.Support is the original support.
+        // Distribution: reciprocal spring.Support is original resistance.
+        double structuralLevel = isDistribution
+            ? 1.0 / spring.Support
+            : spring.Support;
+
+        if (!double.IsFinite(structuralLevel) || structuralLevel <= 0.0)
+            return false;
+
+        // Examine every bar following recovery, including historical bars
+        // that occurred before the latest bar.
+        for (int i = recoveryIndex + 1; i < s.Count; i++)
+        {
+            if (isDistribution)
+            {
+                // Distribution structure fails if price moves sufficiently
+                // above established resistance.
+                double closeFailureLevel =
+                    structuralLevel * (1.0 + closeTolerancePct);
+
+                double intradayFailureLevel =
+                    structuralLevel * (1.0 + intradayTolerancePct);
+
+                if (s.Close[i] > closeFailureLevel)
+                    return false;
+
+                if (s.High[i] > intradayFailureLevel)
+                    return false;
+            }
+            else
+            {
+                // Accumulation structure fails if price moves sufficiently
+                // below established support.
+                double closeFailureLevel =
+                    structuralLevel * (1.0 - closeTolerancePct);
+
+                double intradayFailureLevel =
+                    structuralLevel * (1.0 - intradayTolerancePct);
+
+                if (s.Close[i] < closeFailureLevel)
+                    return false;
+
+                if (s.Low[i] < intradayFailureLevel)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+    
+    /// <summary>
+    /// Determines whether a detected sign-of-strength/sign-of-weakness
+    /// breakout has remained valid through the latest available bar.
+    ///
+    /// Accumulation:
+    ///   Breakout above resistance.
+    ///   Invalid if a subsequent close falls sufficiently below resistance.
+    ///
+    /// Distribution:
+    ///   Breakout below support.
+    ///   Invalid if a subsequent close rises sufficiently above support.
+    ///
+    /// The breakout bar itself is excluded because its closing price
+    /// establishes the initial breakout.
+    ///
+    /// Every subsequent closing price is examined, not just the latest.
+    /// </summary>
+    private static bool IsBreakoutStillHolding(
+        PriceSeries s,
+        int breakoutIndex,
+        double breakoutLevel,
+        bool isDistribution,
+        double tolerancePct)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+
+        if (tolerancePct < 0.0 || tolerancePct >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(tolerancePct));
+        }
+
+        if (breakoutIndex < 0 || breakoutIndex >= s.Count)
+            return false;
+
+        // Convert the candidate's structural level into original-price
+        // coordinates.
+        //
+        // Accumulation: resistance is already in original-price space.
+        // Distribution: inverted resistance represents original support.
+        double level = isDistribution
+            ? 1.0 / breakoutLevel
+            : breakoutLevel;
+
+        if (!double.IsFinite(level) || level <= 0.0)
+            return false;
+
+        // Examine every closing price after the breakout.
+        for (int i = breakoutIndex + 1; i < s.Count; i++)
+        {
+            if (isDistribution)
+            {
+                // Distribution fails if price closes back above support.
+                double failureLevel = level * (1.0 + tolerancePct);
+
+                if (s.Close[i] > failureLevel)
+                    return false;
+            }
+            else
+            {
+                // Accumulation fails if price closes back below resistance.
+                double failureLevel = level * (1.0 - tolerancePct);
+
+                if (s.Close[i] < failureLevel)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
 }

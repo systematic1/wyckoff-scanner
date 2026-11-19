@@ -58,6 +58,7 @@ public sealed class AnalyzerOptions
     public double AccumulationVolumeRatio { get; set; } = 0.90;
     public double StructureBreakdownPct { get; set; } = 0.08;
     public int AccumulationMaxAgeBars { get; set; } = 20;
+    public double PriceRangeTolerance { get; set; } = 0.02;
 
     // Spring/upthrust.
     public int SpringRangeLookbackBars { get; set; } = 40;
@@ -69,13 +70,16 @@ public sealed class AnalyzerOptions
     public double MaxSpringPiercePct { get; set; } = 0.06;
     public int SpringRecoveryBars { get; set; } = 3;
     public int SpringMaxAgeBars { get; set; } = 30;
-
+    public double SpringStructureCloseTolerancePct { get; set; } = 0.01;
+    public double SpringStructureIntradayTolerancePct { get; set; } = 0.03;
+    
     // Sign of strength/weakness.
     public double BreakoutMarginPct { get; set; } = 0.005;
     public double SosVolumeMultiple { get; set; } = 1.3;
     public int SosMaxAgeBars { get; set; } = 10;
-    public double SosHoldTolerancePct { get; set; } = 0.02;
-
+    public double SosHoldTolerancePct { get; set; } = 0.02; 
+    public double BreakoutHoldingTolerancePct { get; set; } = 0.01;
+    
     /// <summary>
     /// Validate settings that could otherwise cause invalid indexing, divide-by-zero,
     /// or nonsensical thresholds. This intentionally does not attempt to tune strategy
@@ -135,6 +139,7 @@ public sealed class AnalyzerOptions
         Positive(LargeSellingMultiple, nameof(LargeSellingMultiple));
         Positive(RoundedClimaxVolumeMultiple, nameof(RoundedClimaxVolumeMultiple));
         Positive(RoundedMinRSquared, nameof(RoundedMinRSquared));
+        
         if (ClimaxVolumeMultiple < 0 || !double.IsFinite(ClimaxVolumeMultiple))
             throw new ArgumentOutOfRangeException(nameof(ClimaxVolumeMultiple));
         if (RallyVolumeMaxRatio < RallyVolumeMinRatio)

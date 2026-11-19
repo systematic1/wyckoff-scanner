@@ -111,4 +111,5 @@ public sealed class FlaggedSymbol
     public decimal? ResistancePrice { get; set; }
     public decimal? LastClose { get; set; }
     public string? Details { get; set; }
+    public double ProbScore { get; set; }
 }

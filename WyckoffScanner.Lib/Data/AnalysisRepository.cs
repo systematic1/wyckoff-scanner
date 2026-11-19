@@ -30,11 +30,11 @@ public sealed class AnalysisRepository
 INSERT INTO analysis_results
     (symbol_id, analysis_date, pattern, flag, flag_message, selling_exhaustion, automatic_rally, accumulation,
      accumulation_count, spring, sign_of_strength, support_price, resistance_price, last_close,
-     bars_analyzed, details)
+     bars_analyzed, details, prob_score)
 VALUES
     (@SymbolId, @AnalysisDate, @Pattern, @Flag, @FlagMessage, @SellingExhaustion, @AutomaticRally, @Accumulation,
      @AccumulationCount, @Spring, @SignOfStrength, @Support, @Resistance, @LastClose,
-     @BarsAnalyzed, @Details)
+     @BarsAnalyzed, @Details, @ProbScore)
 ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
     pattern = EXCLUDED.pattern, flag = EXCLUDED.flag, flag_message = EXCLUDED.flag_message,
     selling_exhaustion = EXCLUDED.selling_exhaustion, automatic_rally = EXCLUDED.automatic_rally,
@@ -42,7 +42,7 @@ ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
     spring = EXCLUDED.spring, sign_of_strength = EXCLUDED.sign_of_strength,
     support_price = EXCLUDED.support_price, resistance_price = EXCLUDED.resistance_price,
     last_close = EXCLUDED.last_close, bars_analyzed = EXCLUDED.bars_analyzed,
-    details = EXCLUDED.details, created_at = now();";
+    details = EXCLUDED.details, created_at = now(), prob_score = EXCLUDED.prob_score;";
 
         var parameters = results.Select(r => new
         {
@@ -61,7 +61,8 @@ ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
             Resistance = r.Resistance.HasValue ? (decimal?)Math.Round((decimal)r.Resistance.Value, 4) : null,
             LastClose = (decimal?)Math.Round((decimal)r.LastClose, 4),
             r.BarsAnalyzed,
-            r.Details
+            r.Details,
+            r.ProbabilityScore?.Score
         }).ToList();
 
         await using var conn = await _db.OpenAsync(ct);
@@ -73,7 +74,7 @@ ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
     public async Task<IReadOnlyList<FlaggedSymbol>> GetFlaggedAsync(DateOnly analysisDate, CancellationToken ct)
     {
         const string sql = @"
-SELECT s.ticker, a.pattern, a.flag, a.flag_message, a.support_price, a.resistance_price, a.last_close, a.details
+SELECT s.ticker, a.pattern, a.flag, a.flag_message, a.support_price, a.resistance_price, a.last_close, a.details, a.prob_score
 FROM   analysis_results a
 JOIN   symbols s ON s.symbol_id = a.symbol_id
 WHERE  a.analysis_date = @analysisDate AND a.flag <> 'None'

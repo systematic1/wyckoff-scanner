@@ -326,6 +326,6 @@ public static class WyckoffProbabilityScorer
     private static void Fraction(double value, string name)
     {
         if (!double.IsFinite(value) || value < 0 || value > 1)
-            throw new ArgumentOutOfRangeException(name, "Value must be finite and between 0 and 1.");
+            throw new ArgumentOutOfRangeException(name, $"Value {value} must be finite and between 0 and 1.");
     }
 }
