@@ -107,6 +107,8 @@ internal sealed class PatternEngine
         if (ar == null)
             return cand;
 
+        //*** IMPROVEMENT
+        /*
         // Invalidation is checked through the latest bar, not just through the date on which
         // the rally was identified. This prevents a later decisive breakdown from leaving an
         // old accumulation candidate active.
@@ -116,7 +118,25 @@ internal sealed class PatternEngine
             if (s.Close[i] < floor)
                 return null;
         }
-
+        */
+        double floor = s.Low[lowIdx] * (1 - _o.StructureBreakdownPct);
+        int breakdownCount = 0;
+        const int MaxAllowedBreakdowns = 2;          // or make configurable
+        for (int i = ar.Index + 1; i < s.Count; i++)
+        {
+            if (s.Close[i] < floor)
+            {
+                breakdownCount++;
+                if (breakdownCount > MaxAllowedBreakdowns)
+                    return null;
+            }
+            else
+            {
+                breakdownCount = 0; // reset on recovery
+            }
+        }
+        //***
+        
         cand.Rally = ar;
         cand.Zones = DetectAccumulation(s, ex, ar);
         if (cand.Zones.Count == 0)
@@ -229,7 +249,10 @@ internal sealed class PatternEngine
                 peak = i;
         }
         
-        double peakIntensity = s.SmoothedTrPct[peak];
+        //*** Improvement 
+        //double peakIntensity = s.SmoothedTrPct[peak];
+        double peakIntensity = PriceSeries.Mean(s.SmoothedTrPct, Math.Max(high+1, peak-1), Math.Min(peakMax, peak+1));
+        //***
         if (peakIntensity < _o.LargeSellingMultiple * s.MedianTrPct) 
             return null;       // selling wasn't "large"
 
@@ -470,6 +493,11 @@ internal sealed class PatternEngine
         int n = s.Count;
         int i = ar.Index + 1;
 
+        //** Improvement (G)
+        double priorDecline = (s.High[ex.HighIndex] - s.Low[ex.LowIndex]) / s.High[ex.HighIndex];
+        double adaptiveMaxRange = Math.Max(_o.MaxAccumulationRangePct, priorDecline * 0.45); // e.g. 45% of the decline size
+        //**
+        
         while (i + _o.MinAccumulationBars <= n)
         {
             double hi = double.MinValue, lo = double.MaxValue;
@@ -485,7 +513,7 @@ internal sealed class PatternEngine
 
                 double nh = Math.Max(hi, nextHigh);
                 double nl = Math.Min(lo, nextLow);
-                if (nl <= 0 || (nh - nl) / nl > _o.MaxAccumulationRangePct ||
+                if (nl <= 0 || (nh - nl) / nl > adaptiveMaxRange ||
                     nl < floor || nh > cap)
                     break;
 
@@ -497,6 +525,7 @@ internal sealed class PatternEngine
             int length = e - i + 1;
             if (length >= _o.MinAccumulationBars)
             {
+                /*
                 double meanVolume = PriceSeries.Mean(s.Volume, i, e);
                 double ratio = s.MedianVolume > 0 ? meanVolume / s.MedianVolume : double.PositiveInfinity;
                 if (ratio <= _o.AccumulationVolumeRatio)
@@ -505,6 +534,24 @@ internal sealed class PatternEngine
                     i = e + 1;
                     continue;
                 }
+                */
+                //*** IMPROVEMENT
+                double climaxVol = ex.ClimaxVolume;
+                double meanVolume = PriceSeries.Mean(s.Volume, i, e);
+                double ratioVsMedian = s.MedianVolume > 0 ? meanVolume / s.MedianVolume : double.PositiveInfinity;
+                double ratioVsClimax = climaxVol > 0 ? meanVolume / climaxVol : 1.0;
+
+                // Accept if either the original rule passes OR volume has contracted meaningfully vs the climax
+                bool volumeOk = ratioVsMedian <= _o.AccumulationVolumeRatio 
+                                || ratioVsClimax <= 0.55;   // or expose as a new option
+
+                if (volumeOk)
+                {
+                    zones.Add(new AccumulationZone(i, e, lo, hi, ratioVsMedian));
+                    i = e + 1;
+                    continue;
+                }
+                //***
             }
 
             i++;

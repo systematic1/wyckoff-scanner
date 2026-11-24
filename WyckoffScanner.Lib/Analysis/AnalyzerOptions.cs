@@ -24,10 +24,10 @@ public sealed class AnalyzerOptions
     public int MinDeclineBars { get; set; } = 5;
     public double MinDeclinePct { get; set; } = 0.15;
     public int SmoothingBars { get; set; } = 3;
-    public double LargeSellingMultiple { get; set; } = 1.5;
+    public double LargeSellingMultiple { get; set; } = 1.35;
     public int MinTailBars { get; set; } = 3;
-    public double MaxExhaustionDecayRatio { get; set; } = 0.70;
-    public double ClimaxVolumeMultiple { get; set; } = 1.3;
+    public double MaxExhaustionDecayRatio { get; set; } = 0.75;
+    public double ClimaxVolumeMultiple { get; set; } = 1.2;
 
     // Rounded climax: gradual volume fade and curved price recovery.
     public bool DetectRoundedClimax { get; set; } = true;
@@ -36,25 +36,25 @@ public sealed class AnalyzerOptions
     public int VolumeSmoothingBars { get; set; } = 5;
     public int RoundedMinTailBars { get; set; } = 8;
     public double RoundedClimaxVolumeMultiple { get; set; } = 1.2;
-    public double RoundedMaxVolumeFadeRatio { get; set; } = 0.65;
-    public double RoundedMaxDecelRatio { get; set; } = 0.60;
+    public double RoundedMaxVolumeFadeRatio { get; set; } = 0.70;
+    public double RoundedMaxDecelRatio { get; set; } = 0.70;
     public int RoundedRecoveryBars { get; set; } = 25;
     public int RoundedMinRecoveryBars { get; set; } = 8;
-    public double RoundedMinRSquared { get; set; } = 0.60;
+    public double RoundedMinRSquared { get; set; } = 0.55;
     public int RoundedVertexToleranceBars { get; set; } = 6;
     public int RoundedMaxRecoveryBars { get; set; } = 40;
     public double RoundedMinRecoveryPct { get; set; } = 0.05;
 
     // Automatic rally/reaction.
     public int AutoRallyMaxBars { get; set; } = 20;
-    public double MinRallyPct { get; set; } = 0.06;
-    public double MinRetraceOfDecline { get; set; } = 0.20;
+    public double MinRallyPct { get; set; } = 0.05;
+    public double MinRetraceOfDecline { get; set; } = 0.15;
     public double RallyVolumeMinRatio { get; set; } = 0.5;
     public double RallyVolumeMaxRatio { get; set; } = 1.5;
 
     // Accumulation/distribution trading range.
-    public int MinAccumulationBars { get; set; } = 10;
-    public double MaxAccumulationRangePct { get; set; } = 0.12;
+    public int MinAccumulationBars { get; set; } = 8;
+    public double MaxAccumulationRangePct { get; set; } = 0.18;
     //*** IMPROVEMENTS:
     // Independent range-first path: recognizes a developing trading range without requiring a prior climax/rally.
     public bool EnableRangeFirstAccumulation { get; set; } = true;
@@ -65,9 +65,9 @@ public sealed class AnalyzerOptions
     // If false, a successful parabola fit is supporting evidence rather than a hard gate.
     public bool RoundedRequireParabola { get; set; } = false;
     //***
-    public double AccumulationVolumeRatio { get; set; } = 0.90;
-    public double StructureBreakdownPct { get; set; } = 0.08;
-    public int AccumulationMaxAgeBars { get; set; } = 20;
+    public double AccumulationVolumeRatio { get; set; } = 1.1;
+    public double StructureBreakdownPct { get; set; } = 0.10;
+    public int AccumulationMaxAgeBars { get; set; } = 30;
     public double PriceRangeTolerance { get; set; } = 0.02;
 
     // Spring/upthrust.
@@ -115,9 +115,6 @@ public sealed class AnalyzerOptions
         Positive(RoundedMaxRecoveryBars, nameof(RoundedMaxRecoveryBars));
         Positive(AutoRallyMaxBars, nameof(AutoRallyMaxBars));
         Positive(MinAccumulationBars, nameof(MinAccumulationBars));
-        Positive(RangeFirstLookbackBars, nameof(RangeFirstLookbackBars));
-        Positive(RangeFirstMinTouches, nameof(RangeFirstMinTouches));
-        Positive(AccumulationMaxAgeBars, nameof(AccumulationMaxAgeBars));
         Positive(AccumulationMaxAgeBars, nameof(AccumulationMaxAgeBars));
         Positive(SpringRangeLookbackBars, nameof(SpringRangeLookbackBars));
         Positive(MinSupportTouches, nameof(MinSupportTouches));
@@ -137,9 +134,6 @@ public sealed class AnalyzerOptions
         Fraction(MinRallyPct, nameof(MinRallyPct));
         Fraction(MinRetraceOfDecline, nameof(MinRetraceOfDecline));
         Fraction(MaxAccumulationRangePct, nameof(MaxAccumulationRangePct));
-        Fraction(RangeFirstMaxWidthPct, nameof(RangeFirstMaxWidthPct));
-        Positive(RangeFirstMaxVolumeRatio, nameof(RangeFirstMaxVolumeRatio));
-        Positive(AccumulationVolumeRatio, nameof(AccumulationVolumeRatio));
         Positive(AccumulationVolumeRatio, nameof(AccumulationVolumeRatio));
         Fraction(StructureBreakdownPct, nameof(StructureBreakdownPct));
         Fraction(SpringMaxRangePct, nameof(SpringMaxRangePct));
