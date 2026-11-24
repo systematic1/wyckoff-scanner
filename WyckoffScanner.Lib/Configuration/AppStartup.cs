@@ -14,6 +14,8 @@ namespace WyckoffScanner.Lib.Configuration;
 
 public static class AppStartup
 {
+    public const string VERSION = "1.0.0.0";
+    
     public static (String email, String apiToUse) ConfigureServices(IConfiguration cfg, IServiceCollection services)
     {
         // Secrets (DB password, SMTP password) are better kept out of appsettings.json:

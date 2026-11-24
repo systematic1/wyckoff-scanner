@@ -3,10 +3,12 @@ using WyckoffScanner.Lib.Models;
 
 namespace WyckoffScanner.Lib.Analysis;
 
+    
 /// <summary>Best candidate found by a <see cref="PatternEngine"/>. Flag is the accumulation-style stage (1..3).</summary>
 internal sealed class Candidate
 {
     public SellingExhaustion Exhaustion { get; init; } = null!;
+    public bool ClimaxConfirmed { get; init; } = true;
     public AutomaticRally? Rally { get; set; }
     public List<AccumulationZone> Zones { get; set; } = new();
     public SpringInfo? Spring { get; set; }
@@ -36,6 +38,8 @@ internal sealed class Candidate
 /// </summary>
 internal sealed class PatternEngine
 {
+    const double Epsilon = 0.0001;
+
     private readonly AnalyzerOptions _o;
 
     public PatternEngine(AnalyzerOptions options) => _o = options;
@@ -59,6 +63,15 @@ internal sealed class PatternEngine
                 if (c != null && IsBetter(c, best))
                     best = c;
             }
+        }
+
+        // A developing trading range can be meaningful even when the preceding decline
+        // does not satisfy our deliberately conservative climax/rally rules.
+        if (_o.EnableRangeFirstAccumulation)
+        {
+            var rangeCandidate = FindRangeFirstCandidate(s);
+            if (rangeCandidate != null && IsBetter(rangeCandidate, best))
+                best = rangeCandidate;
         }
 
         return best;
@@ -299,10 +312,18 @@ internal sealed class PatternEngine
         if (after < _o.RoundedMinRecoveryBars) 
             return null;       // not enough bars after the low to confirm the shape
 
-        if (!PriceSeries.FitParabola(s.Close, high, low + after, out double a, out double vertex, out double r2))
+        //*** IMPROVEMENT:
+        /*if (!PriceSeries.FitParabola(s.Close, high, low + after, out double a, out double vertex, out double r2))
             return null;
-        if (a <= 0 || r2 < _o.RoundedMinRSquared || Math.Abs(vertex - low) > _o.RoundedVertexToleranceBars) 
+        if (a <= 0 || r2 < _o.RoundedMinRSquared || Math.Abs(vertex - low) > _o.RoundedVertexToleranceBars)*/ 
+        double r2 = 0;
+        bool hasBowlFit = PriceSeries.FitParabola(s.Close, high, low + after,
+                              out double a, out double vertex, out r2) &&
+                          a > 0 && r2 >= _o.RoundedMinRSquared &&
+                          Math.Abs(vertex - low) <= _o.RoundedVertexToleranceBars;
+        if (_o.RoundedRequireParabola && !hasBowlFit)
             return null;
+        //***
 
         double peakIntensity = s.SmoothedTrPct[peak];
         double endIntensity = PriceSeries.Mean(s.TrPct, endFrom, low);
@@ -326,7 +347,11 @@ internal sealed class PatternEngine
         int end = Math.Min(s.Count - 1, low + _o.AutoRallyMaxBars);
         if (end - low < 3) 
             return null;
-
+        
+        //*** IMPROVEMENT:
+        AutomaticRally? best = null;
+        
+        /*
         // Use the first confirmed local swing high rather than the highest high anywhere
         // in the full window. The latter can accidentally absorb a later markup leg and
         // mislabel it as the automatic rally.
@@ -362,6 +387,31 @@ internal sealed class PatternEngine
             return null;     // moderate = quieter than the selling climax
 
         return new AutomaticRally(a, s.High[a], rallyPct, retrace, volRatio);
+        */
+        double declineAmt = s.High[ex.HighIndex] - s.Low[low];
+        for (int a = low + 2; a <= end - 2; a++)
+        {
+            bool localHigh = s.High[a] >= s.High[a - 1] && s.High[a] >= s.High[a - 2] &&
+                             s.High[a] > s.High[a + 1] && s.High[a] > s.High[a + 2];
+            if (!localHigh) continue;
+
+            double rise = s.High[a] - s.Low[low];
+            double rallyPct = rise / s.Low[low];
+            double retrace = declineAmt > 0 ? rise / declineAmt : 0;
+            if (rallyPct < _o.MinRallyPct || retrace < _o.MinRetraceOfDecline) continue;
+
+            double avgVol = PriceSeries.Mean(s.Volume, low + 1, a);
+            double volRatio = avgVol / s.MedianVolume;
+            if (volRatio < _o.RallyVolumeMinRatio || volRatio > _o.RallyVolumeMaxRatio || avgVol >= ex.ClimaxVolume)
+                continue;
+
+            var candidate = new AutomaticRally(a, s.High[a], rallyPct, retrace, volRatio);
+            // Prefer the strongest retracement; on a tie, prefer the earlier confirmed swing high.
+            if (best == null || candidate.RetraceOfDecline > best.RetraceOfDecline ||
+                (Math.Abs(candidate.RetraceOfDecline - best.RetraceOfDecline) < Epsilon && candidate.Index < best.Index))
+                best = candidate;
+        }
+        return best;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -461,6 +511,92 @@ internal sealed class PatternEngine
         }
 
         return zones;
+    }
+    
+    // ------------------------------------------------------------------------------------------------
+    // Range-first candidate: identify a recent, reasonably tight, repeatedly tested and
+    // volume-acceptable trading range without requiring a prior selling climax or AR.
+    // It is deliberately labelled as developing, not confirmed accumulation.
+    // ------------------------------------------------------------------------------------------------
+
+    private Candidate? FindRangeFirstCandidate(PriceSeries s)
+    {
+        int end = s.Count - 1;
+        int earliest = Math.Max(0, end - _o.RangeFirstLookbackBars + 1);
+        int minBars = _o.MinAccumulationBars;
+        AccumulationZone? bestZone = null;
+        double bestQuality = double.NegativeInfinity;
+
+        for (int start = earliest; start <= end - minBars + 1; start++)
+        {
+            double lo = double.MaxValue, hi = double.MinValue;
+            for (int stop = start + minBars - 1; stop <= end; stop++)
+            {
+                lo = Math.Min(lo, s.Low[stop]);
+                hi = Math.Max(hi, s.High[stop]);
+                if (lo <= 0 || (hi - lo) / lo > _o.RangeFirstMaxWidthPct) break;
+                int length = stop - start + 1;
+                if (length < minBars) continue;
+
+                double volumeRatio = PriceSeries.Mean(s.Volume, start, stop) / Math.Max(s.MedianVolume, 1e-12);
+                if (volumeRatio > _o.RangeFirstMaxVolumeRatio) continue;
+
+                int supportTouches = 0, resistanceTouches = 0;
+                for (int k = start; k <= stop; k++)
+                {
+                    if (s.Low[k] <= lo * (1 + _o.TouchTolerancePct)) supportTouches++;
+                    if (s.High[k] >= hi * (1 - _o.TouchTolerancePct)) resistanceTouches++;
+                }
+                if (supportTouches < _o.RangeFirstMinTouches || resistanceTouches < _o.RangeFirstMinTouches)
+                    continue;
+
+                // Reward duration and quieter volume; modestly penalize wider ranges.
+                double width = (hi - lo) / lo;
+                double quality = length / (double)_o.RangeFirstLookbackBars +
+                                 (1.0 - Math.Min(volumeRatio, 2.0) / 2.0) - width;
+                if (quality > bestQuality)
+                {
+                    bestQuality = quality;
+                    bestZone = new AccumulationZone(start, stop, lo, hi, volumeRatio);
+                }
+            }
+        }
+
+        if (bestZone == null) return null;
+        int lowIndex = bestZone.Start;
+        for (int i = bestZone.Start + 1; i <= bestZone.End; i++)
+            if (s.Low[i] < s.Low[lowIndex]) lowIndex = i;
+        int highIndex = bestZone.Start;
+        for (int i = bestZone.Start + 1; i <= bestZone.End; i++)
+            if (s.High[i] > s.High[highIndex]) highIndex = i;
+
+        var placeholder = new SellingExhaustion(highIndex, lowIndex, lowIndex,
+            Math.Max(0, (s.High[highIndex] - s.Low[lowIndex]) / s.High[highIndex]),
+            0, 0, 0, 0);
+        var candidate = new Candidate
+        {
+            Exhaustion = placeholder,
+            ClimaxConfirmed = false,
+            Zones = new List<AccumulationZone> { bestZone },
+            Flag = end - bestZone.End <= _o.AccumulationMaxAgeBars
+                ? WyckoffFlag.LikelyProgressing : WyckoffFlag.None
+        };
+
+        // Permit spring/SoS analysis on the range-first path too, but these events remain
+        // independently gated by the same support/resistance and breakout rules.
+        foreach (var spring in DetectSprings(s, candidate.Zones))
+        {
+            var sos = DetectSignOfStrength(s, spring);
+            var flag = ClassifySpring(s, spring, sos);
+            if (flag != WyckoffFlag.SosDetected) sos = null;
+            if (flag > candidate.Flag || (flag == candidate.Flag && spring.Index >= (candidate.Spring?.Index ?? -1)))
+            {
+                candidate.Flag = flag;
+                candidate.Spring = spring;
+                candidate.Sos = sos;
+            }
+        }
+        return candidate;
     }
 
     // ------------------------------------------------------------------------------------------------

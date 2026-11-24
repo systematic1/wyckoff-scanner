@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS analysis_results (
     last_close         NUMERIC(18,6) NULL,
     bars_analyzed      INTEGER       NOT NULL DEFAULT 0,
     details            TEXT          NULL,
+    prob_score         NUMERIC(6,2)  NULL,
     created_at         TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT uq_analysis_symbol_date UNIQUE (symbol_id, analysis_date),
     CONSTRAINT ck_analysis_flag CHECK (flag IN ('None','LikelyProgressing','SpringDetected','SosDetected',

@@ -55,6 +55,16 @@ public sealed class AnalyzerOptions
     // Accumulation/distribution trading range.
     public int MinAccumulationBars { get; set; } = 10;
     public double MaxAccumulationRangePct { get; set; } = 0.12;
+    //*** IMPROVEMENTS:
+    // Independent range-first path: recognizes a developing trading range without requiring a prior climax/rally.
+    public bool EnableRangeFirstAccumulation { get; set; } = true;
+    public int RangeFirstLookbackBars { get; set; } = 60;
+    public double RangeFirstMaxWidthPct { get; set; } = 0.22;
+    public double RangeFirstMaxVolumeRatio { get; set; } = 1.15;
+    public int RangeFirstMinTouches { get; set; } = 2;
+    // If false, a successful parabola fit is supporting evidence rather than a hard gate.
+    public bool RoundedRequireParabola { get; set; } = false;
+    //***
     public double AccumulationVolumeRatio { get; set; } = 0.90;
     public double StructureBreakdownPct { get; set; } = 0.08;
     public int AccumulationMaxAgeBars { get; set; } = 20;
@@ -105,6 +115,9 @@ public sealed class AnalyzerOptions
         Positive(RoundedMaxRecoveryBars, nameof(RoundedMaxRecoveryBars));
         Positive(AutoRallyMaxBars, nameof(AutoRallyMaxBars));
         Positive(MinAccumulationBars, nameof(MinAccumulationBars));
+        Positive(RangeFirstLookbackBars, nameof(RangeFirstLookbackBars));
+        Positive(RangeFirstMinTouches, nameof(RangeFirstMinTouches));
+        Positive(AccumulationMaxAgeBars, nameof(AccumulationMaxAgeBars));
         Positive(AccumulationMaxAgeBars, nameof(AccumulationMaxAgeBars));
         Positive(SpringRangeLookbackBars, nameof(SpringRangeLookbackBars));
         Positive(MinSupportTouches, nameof(MinSupportTouches));
@@ -124,6 +137,9 @@ public sealed class AnalyzerOptions
         Fraction(MinRallyPct, nameof(MinRallyPct));
         Fraction(MinRetraceOfDecline, nameof(MinRetraceOfDecline));
         Fraction(MaxAccumulationRangePct, nameof(MaxAccumulationRangePct));
+        Fraction(RangeFirstMaxWidthPct, nameof(RangeFirstMaxWidthPct));
+        Positive(RangeFirstMaxVolumeRatio, nameof(RangeFirstMaxVolumeRatio));
+        Positive(AccumulationVolumeRatio, nameof(AccumulationVolumeRatio));
         Positive(AccumulationVolumeRatio, nameof(AccumulationVolumeRatio));
         Fraction(StructureBreakdownPct, nameof(StructureBreakdownPct));
         Fraction(SpringMaxRangePct, nameof(SpringMaxRangePct));

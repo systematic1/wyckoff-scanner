@@ -44,7 +44,7 @@ class TesterProgram
         
         string symbol = string.Empty;
         
-        Console.WriteLine("=========== Wyckoff Analysis Logic Tester ==========");
+        Console.WriteLine($"===============   Wyckoff Analysis Logic Tester:  {AppStartup.VERSION}   ==============");
 
         while (true)
         {
@@ -136,6 +136,8 @@ class TesterProgram
             result.ProbabilityScore?.Score >= 50.0,
             $"Wyckoff Probability score:            {result.ProbabilityScore?.Score ?? -1}"
         );
+        
+        Console.WriteLine("----------------------------------------------------------------------------");
 
         return result;
     }

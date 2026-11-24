@@ -122,10 +122,11 @@ public sealed class WyckoffAnalyzer
         {
             Direction = isDistribution ? WyckoffDirection.Distribution : WyckoffDirection.Accumulation,
 
-            ClimaxDetected = true,
+            ClimaxDetected = best.ClimaxConfirmed,    //*** true,
             ClimaxMovePct = best.Exhaustion.DeclinePct,
             ClimaxVolumeMultiple = best.Exhaustion.ClimaxVolumeRatio,
-            ClimaxIntensityMultiple = best.Exhaustion.PeakIntensity / s.MedianTrPct,
+            //*** ClimaxIntensityMultiple = best.Exhaustion.PeakIntensity / s.MedianTrPct,
+            ClimaxIntensityMultiple = best.ClimaxConfirmed ? best.Exhaustion.PeakIntensity / s.MedianTrPct : 0.0,
             ExhaustionFadeRatio = best.Exhaustion.EndIntensity / (best.Exhaustion.PeakIntensity + 0.0001),
             ClimaxAgeBars = s.Count - 1 - best.Exhaustion.LowIndex,
 
@@ -193,7 +194,7 @@ public sealed class WyckoffAnalyzer
 
         result.Pattern = (isDistribution ? WyckoffPattern.Distribution : WyckoffPattern.Accumulation);
         result.Flag = (isDistribution && best.Flag != WyckoffFlag.None ? (WyckoffFlag)((int)best.Flag + 3) : best.Flag);
-        result.SellingExhaustion = true;
+        result.SellingExhaustion = best.ClimaxConfirmed;   //*** true;
         result.AutomaticRally = best.Rally != null;
         result.Accumulation = best.Zones.Count > 0;
         result.AccumulationCount = best.Zones.Count;
@@ -290,10 +291,23 @@ public sealed class WyckoffAnalyzer
         var sb = new StringBuilder();
         var ex = c.Exhaustion;
 
+        //*** IMPROVEMENT:
+        /*
         sb.Append("[Accumulation] ");
         sb.Append(F($"Selling exhaustion ({(ex.Style == ClimaxStyle.Rounded ? "rounded" : "sharp")}): fell {ex.DeclinePct:P1} from {s.High[ex.HighIndex]:F2} ({s.Dates[ex.HighIndex]:yyyy-MM-dd}) "));
         sb.Append(F($"to a low of {s.Low[ex.LowIndex]:F2} ({s.Dates[ex.LowIndex]:yyyy-MM-dd}); "));
         sb.Append(ClimaxBehaviour(ex));
+        */
+        sb.Append(c.ClimaxConfirmed ? "[Accumulation] " : "[Developing accumulation] ");
+        if (c.ClimaxConfirmed)
+        {
+            sb.Append(F($"Selling exhaustion ({(ex.Style == ClimaxStyle.Rounded ? "rounded" : "sharp")}): fell {ex.DeclinePct:P1} from {s.High[ex.HighIndex]:F2} ({s.Dates[ex.HighIndex]:yyyy-MM-dd}) "));
+            sb.Append(F($"to a low of {s.Low[ex.LowIndex]:F2} ({s.Dates[ex.LowIndex]:yyyy-MM-dd}); "));
+            sb.Append(ClimaxBehaviour(ex));
+        }
+        else 
+            sb.Append("Trading range detected independently of a confirmed selling climax/automatic rally; treat as a developing candidate. ");
+        //***
 
         if (c.Rally != null)
         {
@@ -334,11 +348,24 @@ public sealed class WyckoffAnalyzer
         double climaxHigh = s.High[climaxIdx];
         double advance = climaxHigh / startPrice - 1.0;
 
+        //*** IMPROVEMENT:
+        /*
         sb.Append("[Distribution] ");
         sb.Append(F($"Buying climax ({(ex.Style == ClimaxStyle.Rounded ? "rounded" : "sharp")}): rose {advance:P1} from {startPrice:F2} ({s.Dates[startIdx]:yyyy-MM-dd}) "));
         sb.Append(F($"to a high of {climaxHigh:F2} ({s.Dates[climaxIdx]:yyyy-MM-dd}); "));
         sb.Append(ClimaxBehaviour(ex));
-
+        */
+        sb.Append(c.ClimaxConfirmed ? "[Distribution] " : "[Developing distribution] ");
+        if (c.ClimaxConfirmed)
+        {
+            sb.Append(F($"Buying climax ({(ex.Style == ClimaxStyle.Rounded ? "rounded" : "sharp")}): rose {advance:P1} from {startPrice:F2} ({s.Dates[startIdx]:yyyy-MM-dd}) "));
+            sb.Append(F($"to a high of {climaxHigh:F2} ({s.Dates[climaxIdx]:yyyy-MM-dd}); "));
+            sb.Append(ClimaxBehaviour(ex));
+        }
+        else 
+            sb.Append("Trading range detected independently of a confirmed buying climax/automatic reaction; treat as a developing candidate. ");
+        //***
+        
         if (c.Rally != null)
         {
             double reactionLow = s.Low[c.Rally.Index];
