@@ -21,7 +21,7 @@ public sealed class AnalyzerOptions
 
     // Sharp selling/buying climax.
     public int MaxDeclineLookbackBars { get; set; } = 60;
-    public int MinDeclineBars { get; set; } = 5;
+    public int MinDeclineBars { get; set; } = 7;
     public double MinDeclinePct { get; set; } = 0.15;
     public int SmoothingBars { get; set; } = 3;
     public double LargeSellingMultiple { get; set; } = 1.35;
@@ -68,17 +68,17 @@ public sealed class AnalyzerOptions
     public double AccumulationVolumeRatio { get; set; } = 1.1;
     public double StructureBreakdownPct { get; set; } = 0.10;
     public int AccumulationMaxAgeBars { get; set; } = 30;
-    public double PriceRangeTolerance { get; set; } = 0.02;
+    public double PriceRangeTolerance { get; set; } = 0.03;
 
     // Spring/upthrust.
     public int SpringRangeLookbackBars { get; set; } = 40;
     public double SpringMaxRangePct { get; set; } = 0.15;
     public double TouchTolerancePct { get; set; } = 0.015;
     public int MinSupportTouches { get; set; } = 2;
-    public int MinResistanceTouches { get; set; } = 2;
+    public int MinResistanceTouches { get; set; } = 1; //2
     public double MinSpringPiercePct { get; set; } = 0.003;
     public double MaxSpringPiercePct { get; set; } = 0.06;
-    public int SpringRecoveryBars { get; set; } = 3;
+    public int SpringRecoveryBars { get; set; } = 2; //3
     public int SpringMaxAgeBars { get; set; } = 30;
     public double SpringStructureCloseTolerancePct { get; set; } = 0.01;
     public double SpringStructureIntradayTolerancePct { get; set; } = 0.03;

@@ -124,13 +124,13 @@ class TesterProgram
                 result.SignOfStrength,
                 $"Sign Of Strength/Weakness Detected?   {(result.SignOfStrength ? "Yes" : "No")}");
 
-            Console.WriteLine($"Resistance Level:                     ${result.Resistance}");
-            Console.WriteLine($"Support Level:                        ${result.Support}");
+            Console.WriteLine($"Resistance Level:                     ${result.Resistance:F2}");
+            Console.WriteLine($"Support Level:                        ${result.Support:F2}");
         }
 
         Console.WriteLine($"Number of bars analyzed:              {result.BarsAnalyzed}");
         Console.WriteLine($"Last Date Analyzed:                   {result.LastDate}");
-        Console.WriteLine($"Last Close Price:                     ${result.LastClose}");
+        Console.WriteLine($"Last Close Price:                     ${result.LastClose:F2}");
         
         WriteTextColoredByCondition(
             result.ProbabilityScore?.Score >= 50.0,
