@@ -299,10 +299,6 @@ public static class WyckoffProbabilityScorer
 
         double confirmationWeightObserved = confirmationParts.Sum(p => p.MaximumPoints);
         double confirmationPoints = confirmationParts.Sum(p => p.Points);
-        /*double confirmationScore = confirmationWeightObserved > 0
-            ? 100.0 * confirmationPoints / confirmationWeightObserved
-            : 0.0;
-        double confirmationCoverage = confirmationWeightObserved / 100.0 * 100.0;*/
         double confirmationScore = Math.Clamp(confirmationPoints, 0, 100);
         double confirmationCoverage = confirmationWeightObserved;
         
@@ -443,7 +439,6 @@ public static class WyckoffProbabilityScorer
 
         double age = AgeFactor(x.TradingRangeAgeBars, halfLifeBars: 45,
             retainedFloor: x.PriceWithinOrNearRange ? 0.40 : 0.0);
-        //double location = x.PriceWithinOrNearRange ? 1.0 : 0.45;
         double quality = baseQuality * age; // * location;
 
         return Part("Trading range", RangeWeight * quality, RangeWeight,
@@ -456,20 +451,6 @@ public static class WyckoffProbabilityScorer
         // A detected range is not automatically a valid range. Use its current location
         // plus available test counts. Missing test counts are omitted and remaining evidence
         // is normalized rather than silently treated as zero.
-        
-        /*double weighted = 0;
-        double availableWeight = 0;
-        AddEvidence(ref weighted, ref availableWeight, 0.40,
-            x.PriceWithinOrNearRange ? 1.0 : 0.0);
-
-        if (x.RangeSupportTests.HasValue)
-            AddEvidence(ref weighted, ref availableWeight, 0.30,
-                Clamp01(x.RangeSupportTests.Value / 3.0));
-        if (x.RangeResistanceTests.HasValue)
-            AddEvidence(ref weighted, ref availableWeight, 0.30,
-                Clamp01(x.RangeResistanceTests.Value / 3.0));
-
-        double quality = availableWeight > 0 ? weighted / availableWeight : 0;*/
         
         double locationQuality = x.PriceWithinOrNearRange ? 1.0 : 0.0;
 
