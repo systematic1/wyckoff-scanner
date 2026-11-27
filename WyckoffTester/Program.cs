@@ -93,7 +93,7 @@ class TesterProgram
         Console.WriteLine();
 
         Console.WriteLine("****************************************************");
-        Console.WriteLine($"    Wyckoff Pattern Analysis Results for: {symbol}");
+        Console.WriteLine($"    Wyckoff Pattern Analysis Results for:  {symbol}");
         Console.WriteLine("****************************************************");
         Console.WriteLine();
 
@@ -131,12 +131,21 @@ class TesterProgram
         Console.WriteLine($"Number of bars analyzed:              {result.BarsAnalyzed}");
         Console.WriteLine($"Last Date Analyzed:                   {result.LastDate}");
         Console.WriteLine($"Last Close Price:                     ${result.LastClose:F2}");
+        Console.WriteLine();
         
         WriteTextColoredByCondition(
-            result.ProbabilityScore?.Score >= 50.0,
+            result.ProbabilityScore?.Score >= 40.0,
             $"Wyckoff Probability score:            {result.ProbabilityScore?.Score ?? -1}"
         );
-        
+        if (result.ProbabilityScore != null)
+        {
+            Console.WriteLine($"   Invalidated:                       {result.ProbabilityScore?.Invalidated ?? false}");
+            Console.WriteLine($"   Probability rating:                {result.ProbabilityScore?.Rating ?? ""}");
+
+            foreach (var c in result.ProbabilityScore!.Components)
+                Console.WriteLine($"   -> {c.Name.PadRight(35)}] {c.Points:##0}/{c.MaximumPoints:##0} : \t{c.Explanation}");
+        }
+
         Console.WriteLine("----------------------------------------------------------------------------");
 
         return result;

@@ -178,7 +178,7 @@ public static class WyckoffProbabilityScorer
         // Larger climactic moves and above-normal volume strengthen the exhaustion hypothesis.
         double move = Clamp01(x.ClimaxMovePct / 0.30);
         double volume = Clamp01((x.ClimaxVolumeMultiple - 1.0) / 1.5);
-        double quality = 0.55 * move + 0.30 * volume;
+        double quality = 0.55 * move + 0.35 * volume;
 
         // Sharp detectors can supply intensity/fade; rounded detectors can supply curve-fit/fade.
         if (x.ClimaxIntensityMultiple.HasValue)

@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -37,7 +38,6 @@ public sealed class WyckoffAnalyzer
         var configured = options.Value ?? throw new ArgumentException(
             "Analyzer options must be configured.", nameof(options));
         _o = configured.Clone();
-        _o.Validate();
 
         // PatternEngine is stateless; the two instances safely share immutable-in-practice
         // configuration after construction and can be used concurrently by Analyze calls.
@@ -54,6 +54,17 @@ public sealed class WyckoffAnalyzer
             Ticker = ticker, 
             BarsAnalyzed = quotes.Count
         };
+
+        try
+        {
+            _o.Validate();
+        }
+        catch (Exception ex)
+        {
+            result.BarsAnalyzed = 0;
+            result.Details = $"ERROR: {ex.Message}";
+            return result;
+        }
 
         if (quotes.Count < _o.MinBars)
         {

@@ -106,20 +106,26 @@ public sealed class EmailNotifier
         else
         {
             sb.Append("<table cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;border:1px solid #ccc\">");
-            sb.Append("<tr style=\"background:#f0f0f0;text-align:left\"><th>Symbol</th><th>Pattern</th><th>Flag</th><th>Last close</th><th>Support</th><th>Resistance</th><th>Prob score</th></tr>");
+            sb.Append("<tr style=\"background:#f0f0f0;text-align:left\"><th>Symbol</th><th>Pattern</th><th>Flag</th>");
+            sb.Append("<th>Support</th><th>Resistance</th><th>Prob score</th><th>Prob Reason</th></tr>");
 
             foreach (var f in flagged)
             {
                 sb.Append("<tr style=\"border-top:1px solid #ddd\">");
                 sb.Append($"<td><b>{E(f.Ticker)}</b></td><td style=\"color:{(f.Pattern == "Distribution" ? "#b00020" : "#1b7f3b")}\">{E(f.Pattern)}</td><td>{E(f.FlagMessage)}</td>");
-                sb.Append($"<td>{Money(f.LastClose)}</td><td>{Money(f.SupportPrice)}</td><td>{Money(f.ResistancePrice)}</td><td style=\"color:#3366cc\">{f.ProbScore}</td></tr>");
+                sb.Append($"<td>{Money(f.SupportPrice)}</td><td>{Money(f.ResistancePrice)}</td><td style=\"color:#3366cc\">{f.ProbScore}</td></tr>");
                 if (!string.IsNullOrWhiteSpace(f.Details))
                     sb.Append($"<tr><td></td><td colspan=\"5\" style=\"color:#555;font-size:12px\">{E(f.Details)}</td></tr>");
+                if (!string.IsNullOrWhiteSpace(f.ProbDetails))
+                    sb.Append($"<tr><td></td><td colspan=\"5\" style=\"color:#555;font-size:12px\">{E(f.ProbDetails)}</td></tr>");
+                if (!string.IsNullOrWhiteSpace(f.ProbComponents))
+                    sb.Append($"<tr><td></td><td colspan=\"5\" style=\"color:#55C;font-size:12px\">{E(f.ProbComponents)}</td></tr>");
             }
             sb.Append("</table>");
         }
 
         sb.Append("<p style=\"color:#888;font-size:12px\">Automated pattern screen &ndash; not investment advice.</p>");
+        sb.Append("<p style=\"color:#888\">Message was sent on ").Append(DateTime.Now).Append(".</p>");
         sb.Append("</body></html>");
         return sb.ToString();
     }

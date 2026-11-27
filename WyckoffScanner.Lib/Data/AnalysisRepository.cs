@@ -1,4 +1,6 @@
+using System.Text;
 using Dapper;
+using WyckoffScanner.Lib.Analysis;
 using WyckoffScanner.Lib.Models;
 
 namespace WyckoffScanner.Lib.Data;
@@ -30,11 +32,11 @@ public sealed class AnalysisRepository
 INSERT INTO analysis_results
     (symbol_id, analysis_date, pattern, flag, flag_message, selling_exhaustion, automatic_rally, accumulation,
      accumulation_count, spring, sign_of_strength, support_price, resistance_price, last_close,
-     bars_analyzed, details, prob_score)
+     bars_analyzed, details, prob_score, prob_details, prob_components)
 VALUES
     (@SymbolId, @AnalysisDate, @Pattern, @Flag, @FlagMessage, @SellingExhaustion, @AutomaticRally, @Accumulation,
      @AccumulationCount, @Spring, @SignOfStrength, @Support, @Resistance, @LastClose,
-     @BarsAnalyzed, @Details, @ProbScore)
+     @BarsAnalyzed, @Details, @ProbScore, @ProbDetails, @ProbComponents)
 ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
     pattern = EXCLUDED.pattern, flag = EXCLUDED.flag, flag_message = EXCLUDED.flag_message,
     selling_exhaustion = EXCLUDED.selling_exhaustion, automatic_rally = EXCLUDED.automatic_rally,
@@ -42,7 +44,8 @@ ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
     spring = EXCLUDED.spring, sign_of_strength = EXCLUDED.sign_of_strength,
     support_price = EXCLUDED.support_price, resistance_price = EXCLUDED.resistance_price,
     last_close = EXCLUDED.last_close, bars_analyzed = EXCLUDED.bars_analyzed,
-    details = EXCLUDED.details, created_at = now(), prob_score = EXCLUDED.prob_score;";
+    details = EXCLUDED.details, created_at = now(), prob_score = EXCLUDED.prob_score,
+    prob_details = EXCLUDED.prob_details, prob_components = EXCLUDED.prob_components;";
 
         var parameters = results.Select(r => new
         {
@@ -62,7 +65,9 @@ ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
             LastClose = (decimal?)Math.Round((decimal)r.LastClose, 4),
             r.BarsAnalyzed,
             r.Details,
-            r.ProbabilityScore?.Score
+            ProbScore = r.ProbabilityScore?.Score,
+            ProbDetails = r.ProbabilityScore?.Rating,
+            ProbComponents = BuildComponentDetails(r.ProbabilityScore)
         }).ToList();
 
         await using var conn = await _db.OpenAsync(ct);
@@ -74,7 +79,7 @@ ON CONFLICT (symbol_id, analysis_date) DO UPDATE SET
     public async Task<IReadOnlyList<FlaggedSymbol>> GetFlaggedAsync(DateOnly analysisDate, CancellationToken ct)
     {
         const string sql = @"
-SELECT s.ticker, a.pattern, a.flag, a.flag_message, a.support_price, a.resistance_price, a.last_close, a.details, a.prob_score
+SELECT s.ticker, a.pattern, a.flag, a.flag_message, a.support_price, a.resistance_price, a.last_close, a.details, a.prob_score, a.prob_details, a.prob_components
 FROM   analysis_results a
 JOIN   symbols s ON s.symbol_id = a.symbol_id
 WHERE  a.analysis_date = @analysisDate AND a.flag <> 'None'
@@ -86,5 +91,16 @@ ORDER  BY CASE a.flag WHEN 'SosDetected' THEN 1 WHEN 'SowDetected' THEN 1
         var rows = await conn.QueryAsync<FlaggedSymbol>(new CommandDefinition(
             sql, new { analysisDate }, cancellationToken: ct));
         return rows.ToList();
+    }
+
+    private string BuildComponentDetails(WyckoffProbabilityScore? score)
+    {
+        var details = new StringBuilder();
+        if (score != null)
+        {
+            foreach (var c in score.Components)
+                details.Append($"{c.Name} -- {c.Points}/{c.MaximumPoints} -- {c.Explanation};  ");
+        }
+        return details.ToString();
     }
 }

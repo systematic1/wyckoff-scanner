@@ -112,4 +112,6 @@ public sealed class FlaggedSymbol
     public decimal? LastClose { get; set; }
     public string? Details { get; set; }
     public double ProbScore { get; set; }
+    public string? ProbDetails { get; set; }
+    public string? ProbComponents { get; set; }
 }
