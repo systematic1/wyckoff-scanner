@@ -29,4 +29,8 @@
       <PackageReference Include="Npgsql" Version="10.0.3" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Compile Remove="Analysis\WyckoffProbabilityScorer.Revised.cs" />
+    </ItemGroup>
+
 </Project>
