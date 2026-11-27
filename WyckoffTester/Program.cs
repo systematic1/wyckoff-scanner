@@ -143,7 +143,7 @@ class TesterProgram
             Console.WriteLine($"   Probability rating:                {result.ProbabilityScore?.Rating ?? ""}");
 
             foreach (var c in result.ProbabilityScore!.Components)
-                Console.WriteLine($"   -> {c.Name.PadRight(35)}] {c.Points:##0}/{c.MaximumPoints:##0} : \t{c.Explanation}");
+                Console.WriteLine($"   -> {c.Name.PadRight(35)} {c.Points:##0}/{c.MaximumPoints:##0} : \t{c.Explanation}");
         }
 
         Console.WriteLine("----------------------------------------------------------------------------");

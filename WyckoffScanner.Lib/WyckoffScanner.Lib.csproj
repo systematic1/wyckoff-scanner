@@ -30,7 +30,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Compile Remove="Analysis\WyckoffProbabilityScorer.Revised.cs" />
+      <Compile Remove="Analysis\WyckoffProbabilityScorer_Old.cs" />
     </ItemGroup>
 
 </Project>
